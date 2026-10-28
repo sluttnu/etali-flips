@@ -42,6 +42,20 @@
       color: #e6e6e6;
     }
 
+    .corner {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      padding: 4px 12px;
+      font-size: 0.85rem;
+      color: #e6e6e6;
+      text-decoration: none;
+      border: 1px solid #5a5d62;
+      border-radius: 3px;
+      background: #3a3d41;
+    }
+    .corner:hover { background: #46494e; }
+
     .board {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(var(--card-w), 1fr));
@@ -152,6 +166,7 @@
   </header>
 
   <main id="board" class="board"></main>
+  <a class="corner" href="/average-deck">Average deck</a>
 
   <script>
     // Served by the /cardback.jpg route in app.py.

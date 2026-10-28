@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Average deck</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px 32px 48px;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 15px;
+      color: #e6e6e6;
+      background: #2b2d30;
+    }
+
+    header { max-width: 1500px; margin: 0 auto 24px; }
+
+    .back { font-size: 0.85rem; color: #9a9a9a; text-decoration: none; }
+    .back:hover { color: #fff; text-decoration: underline; }
+
+    h1 { margin: 8px 0 4px; font-size: 1.4rem; font-weight: 600; }
+    .sub { margin: 0; font-size: 0.85rem; color: #9a9a9a; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 16px;
+      max-width: 1500px;
+      margin: 0 auto;
+    }
+
+    .card {
+      position: relative;
+      aspect-ratio: 63 / 88;
+      border-radius: 4.5% / 3.2%;
+      overflow: hidden;
+      background: #1d1e20 url("/cardback.jpg") center / cover no-repeat;
+    }
+
+    .card img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .card img.loaded { opacity: 1; }
+
+    .pct {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 5px 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.72);
+    }
+    .pct small { font-weight: 400; color: #b8b8b8; margin-left: 4px; }
+
+    .error { max-width: 1500px; margin: 0 auto; color: #d9a0a0; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="back" href="/">&larr; Etali Flips</a>
+    <h1 id="title">Average deck</h1>
+    <p class="sub" id="sub">Loading&hellip;</p>
+  </header>
+
+  <main id="grid" class="grid"></main>
+
+  <script>
+    const grid = document.getElementById("grid");
+
+    function pctLabel(x) {
+      const p = x * 100;
+      return p > 0 && p < 1 ? "<1%" : Math.round(p) + "%";
+    }
+
+    async function load() {
+      // Passes ?commander=... through, so other commanders work too.
+      const res = await fetch("/api/average-deck" + location.search);
+      const data = await res.json();
+
+      if (!res.ok) {
+        document.getElementById("sub").textContent = "";
+        grid.className = "error";
+        grid.textContent = data.error || "Could not load the average deck.";
+        return;
+      }
+
+      document.getElementById("title").textContent = "Average deck: " + data.commander;
+      document.title = "Average deck: " + data.commander;
+      document.getElementById("sub").textContent =
+        `${data.deck_count} decks, ${data.cards.length} distinct cards, highest inclusion first`;
+
+      data.cards.forEach(c => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.title = `${c.name}: in ${c.decks} of ${data.deck_count} decks`;
+
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.alt = c.name;
+        img.onload = () => img.classList.add("loaded");
+        img.src = c.image;
+        card.appendChild(img);
+
+        const pct = document.createElement("div");
+        pct.className = "pct";
+        pct.textContent = pctLabel(c.inclusion);
+        if (c.avg_copies >= 1.5) {
+          const small = document.createElement("small");
+          small.textContent = "\u00d7" + c.avg_copies.toFixed(1);
+          pct.appendChild(small);
+        }
+        card.appendChild(pct);
+
+        grid.appendChild(card);
+      });
+    }
+
+    load();
+  </script>
+</body>
+</html>

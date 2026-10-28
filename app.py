@@ -1,6 +1,7 @@
 import json, os, random, re, threading, pathlib, time
 from urllib.parse import quote, quote_plus
 from flask import Flask, jsonify, render_template, request, session, send_from_directory
+from collections import Counter
 
 import requests
 
@@ -107,6 +108,31 @@ def pick_decks(choices):
         chosen.append(DECKS[k])
     return chosen
 
+ETALI = "Etali, Primal Conqueror"
+
+def average_deck(prefix=ETALI):
+    decks = [d for d in DECKS if any(c.startswith(prefix) for c in d["commanders"])]
+    n = len(decks)
+
+    present, copies = Counter(), Counter()
+    for d in decks:
+        for name, k in Counter(d["cards"]).items():
+            present[name] += 1
+            copies[name] += k
+
+    cards = [
+        {
+            "name": name,
+            "inclusion": present[name] / n,
+            "decks": present[name],
+            "avg_copies": copies[name] / present[name],
+            "image": get_card_image_name(name) + "&version=normal",
+        }
+        for name in present
+    ]
+    cards.sort(key=lambda c: (-c["inclusion"], c["name"]))
+    return {"commander": prefix, "deck_count": n, "cards": cards}
+
 def new_game_state(choices=()):
     chosen = pick_decks(choices)
     game = []
@@ -169,6 +195,18 @@ def reveal_next_card(game, deck_index):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/average-deck")
+def average_deck_page():
+    return render_template("average_deck.html")
+
+@app.route("/api/average-deck")
+def api_average_deck():
+    prefix = request.args.get("commander", ETALI)
+    data = average_deck(prefix)
+    if not data["deck_count"]:
+        return jsonify({"error": f"No decks found for {prefix}"}), 404
+    return jsonify(data)
 
 @app.route("/api/commanders")
 def api_commanders():
