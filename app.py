@@ -1,5 +1,5 @@
 import json, os, random, re, threading, pathlib, time
-from urllib.parse import quote
+from urllib.parse import quote, quote_plus
 from flask import Flask, jsonify, render_template, request, session
 
 import requests
@@ -26,7 +26,19 @@ def load_dataset():
 
 DATA = load_dataset()
 
+def normalize_decklist(decklist):
+    if not isinstance(decklist, str):
+        return ""
+    # handle both real newlines and escaped ones from JSON
+    return (
+        decklist
+        .replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\r", "\n")
+    )
+
 def parse_decklist(decklist: str):
+    decklist = normalize_decklist(decklist)
     if not decklist:
         return []
 
@@ -43,14 +55,13 @@ def parse_decklist(decklist: str):
             continue
 
         name = m.group(1).strip()
-        if name == "":
-            continue
-        cards.append(name)
+        if name:
+            cards.append(name)
 
     return cards
 
 def normalize_card_name(name):
-    return name.strip()
+    return quote_plus(name.strip())
 
 def card_cache_key(name):
     return normalize_card_name(name).lower()
@@ -61,18 +72,7 @@ def get_card_image_name(name):
         return CARD_CACHE[key]
 
     exact = quote(name)
-    url = f"https://api.scryfall.com/cards/named?exact={exact}&format=json"
-    r = requests.get(url, timeout=10)
-    r.raise_for_status()
-    data = r.json()
-
-    image_url = None
-    if "image_uris" in data and "normal" in data["image_uris"]:
-        image_url = data["image_uris"]["normal"]
-    elif "card_faces" in data and data["card_faces"]:
-        first = data["card_faces"][0]
-        if "image_uris" in first and "normal" in first["image_uris"]:
-            image_url = first["image_uris"]["normal"]
+    image_url = f"https://api.scryfall.com/cards/named?exact={exact}&format=image"
 
     if not image_url:
         raise ValueError(f"Could not find art for {name}")
@@ -82,20 +82,23 @@ def get_card_image_name(name):
 
 def random_deck_records():
     decks = []
-    for tournament in DATA:
-        for player in tournament.get("standings", []):
+    for tournament_index, tournament in enumerate(DATA):
+        standings = tournament.get("standings") or []
+        for player_index, player in enumerate(standings):
             decklist = player.get("decklist")
-            if not decklist:
+            if decklist is None:
                 continue
 
-            cards = parse_decklist(decklist)
-            if not cards:
+            parsed = parse_decklist(decklist)
+            if not parsed:
                 continue
 
             decks.append({
                 "tournament": tournament.get("tournamentName", "Unknown"),
-                "cards": cards,
+                "cards": parsed,
             })
+
+    print(f"random_deck_records -> {len(decks)} valid deck entries loaded")
     return decks
 
 def new_game_state():

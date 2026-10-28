@@ -3,16 +3,18 @@ services:
     image: ghcr.io/sluttnu/etali-flips:${TAG:-latest}
     container_name: etali-flips
     restart: unless-stopped
-    tmpfs: [/tmp]
-    env_files:
+    tmpfs:
+      - /tmp
+    env_file:
       - .env
-    volumes:
-      - etali-flips:/app/cache
-      - ./cardback.jpg:/app/cardback.jpg:ro
-      - ./data:/app/data
     environment:
       PORT: "9000"
-    networks: [proxy]
+    volumes:
+      - etali-flips-cache:/app/cache
+      - ./cardback.jpg:/app/cardback.jpg:ro
+      - ./data:/app/data
+    networks:
+      - proxy
 
 networks:
   proxy:
