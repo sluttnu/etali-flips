@@ -44,8 +44,20 @@
       font-size: 0.9rem;
       font-weight: 500;
       line-height: 1.3;
-      min-height: 2.6em;
+      min-height: 1.3em;
       color: #b8b8b8;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .deck .commanders {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.3;
+      min-height: 2.6em;
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
@@ -123,7 +135,7 @@
   <main id="board" class="board"></main>
 
   <script>
-    // Flask serves /static automatically. Put cardback.jpg in /app/static/.
+    // Served by the /cardback.jpg route in app.py.
     const CARD_BACK = "/cardback.jpg";
     const FLIP_MS = 150;
     const board = document.getElementById("board");
@@ -160,6 +172,11 @@
       const title = document.createElement("h2");
       title.textContent = deck.tournament;
       title.title = deck.tournament;
+
+      const commanders = document.createElement("p");
+      commanders.className = "commanders";
+      commanders.textContent = (deck.commanders || []).join(" / ");
+      commanders.title = commanders.textContent;
 
       // Always start face-down; never show deck.stash up front.
       const cardEl = document.createElement("div");
@@ -251,7 +268,7 @@
       };
 
       render(-1);
-      el.append(title, cardEl, controls, list, note);
+      el.append(title, commanders, cardEl, controls, list, note);
       return el;
     }
 

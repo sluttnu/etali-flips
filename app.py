@@ -26,39 +26,19 @@ def load_dataset():
 
 DATA = load_dataset()
 
-def normalize_decklist(decklist):
-    if not isinstance(decklist, str):
-        return ""
-    # handle both real newlines and escaped ones from JSON
-    return (
-        decklist
-        .replace("\\r\\n", "\n")
-        .replace("\\n", "\n")
-        .replace("\\r", "\n")
-    )
+def deck_from_player(player):
+    """Return (commanders, library_cards) from a standings entry, or None."""
+    deck_obj = player.get("deckObj")
+    if not isinstance(deck_obj, dict):
+        return None
 
-def parse_decklist(decklist: str):
-    decklist = normalize_decklist(decklist)
-    if not decklist:
-        return []
+    commanders = list((deck_obj.get("Commanders") or {}).keys())
 
     cards = []
-    for line in decklist.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith("~~") or line.startswith("--"):
-            continue
+    for name, info in (deck_obj.get("Mainboard") or {}).items():
+        cards.extend([name] * int((info or {}).get("count", 1)))
 
-        m = re.match(r"^\d+\s+(.+)$", line)
-        if not m:
-            continue
-
-        name = m.group(1).strip()
-        if name:
-            cards.append(name)
-
-    return cards
+    return commanders, cards
 
 def normalize_card_name(name):
     return quote_plus(name.strip())
@@ -82,20 +62,18 @@ def get_card_image_name(name):
 
 def random_deck_records():
     decks = []
-    for tournament_index, tournament in enumerate(DATA):
-        standings = tournament.get("standings") or []
-        for player_index, player in enumerate(standings):
-            decklist = player.get("decklist")
-            if decklist is None:
-                continue
-
-            parsed = parse_decklist(decklist)
+    for tournament in DATA:
+        for player in tournament.get("standings") or []:
+            parsed = deck_from_player(player)
             if not parsed:
                 continue
-
+            commanders, cards = parsed
+            if not cards:
+                continue
             decks.append({
                 "tournament": tournament.get("tournamentName", "Unknown"),
-                "cards": parsed,
+                "commanders": commanders,
+                "cards": cards,
             })
 
     print(f"random_deck_records -> {len(decks)} valid deck entries loaded")
@@ -113,19 +91,13 @@ def new_game_state():
         cards = deck["cards"][:]
         random.shuffle(cards)
 
-        # keep a random 5-card stash, no duplicates
-        stash = []
-        seen = set()
-        while len(stash) < 5 and cards:
-            c = cards.pop()
-            key = card_cache_key(c)
-            if key in seen:
-                continue
-            seen.add(key)
-            stash.append(c)
+        # No dedupe: with counts expanded, skipping "duplicates" would
+        # silently delete basic lands from the library.
+        stash = [cards.pop() for _ in range(min(5, len(cards)))]
 
         game.append({
             "tournament": deck["tournament"],
+            "commanders": deck["commanders"],
             "remaining": cards,
             "stash": stash,
             "revealed": [],
@@ -182,6 +154,7 @@ def api_new_game():
         "decks": [
             {
                 "tournament": deck["tournament"],
+                "commanders": deck["commanders"],   # <-- the new line
                 "stash": [
                     {
                         "name": c,
