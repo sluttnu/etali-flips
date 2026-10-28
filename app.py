@@ -195,12 +195,12 @@ def api_new_game():
         ]
     })
 
-@app.route("/api/reveal", methods=["POST"])
 
 @app.route("/cardback.jpg")
 def cardback():
     return send_from_directory(".","cardback.jpg")
 
+@app.route("/api/reveal", methods=["POST"])
 def api_reveal():
     deck_index = int(request.json["deck_index"])
     game = session.get("game")
