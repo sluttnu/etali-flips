@@ -184,7 +184,18 @@ def api_new_game():
         return jsonify({"error": str(e)}), 400
     session["game"] = game
     return jsonify({
-        "decks": [ ... ]   # unchanged
+        "decks": [
+            {
+                "tournament": deck["tournament"],
+                "commanders": deck["commanders"],
+                "stash": [
+                    {"name": c, "image": get_card_image_name(c)}
+                    for c in deck["stash"]
+                ],
+                "revealed": deck["revealed"],
+            }
+            for deck in game
+        ]
     })
 
 
