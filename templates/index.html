@@ -27,6 +27,20 @@
     }
 
     h1 { margin: 0; font-size: 1.4rem; font-weight: 600; }
+    header { flex-wrap: wrap; gap: 12px; }
+
+    .setup { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    select {
+      font: inherit;
+      font-size: 0.85rem;
+      width: 220px;
+      padding: 4px 8px;
+      border: 1px solid #5a5d62;
+      border-radius: 3px;
+      background: #3a3d41;
+      color: #e6e6e6;
+    }
 
     .board {
       display: grid;
@@ -129,7 +143,12 @@
 <body>
   <header>
     <h1>Etali Flips</h1>
-    <button id="new-game" type="button">New game</button>
+    <div class="setup">
+      <select class="pick" aria-label="Deck 1 commander"></select>
+      <select class="pick" aria-label="Deck 2 commander"></select>
+      <select class="pick" aria-label="Deck 3 commander"></select>
+      <button id="new-game" type="button">New game</button>
+    </div>
   </header>
 
   <main id="board" class="board"></main>
@@ -156,9 +175,27 @@
     async function newGame() {
       board.textContent = "";
       preload(CARD_BACK); // warm the cache so the back shows immediately
-      const res = await fetch("/api/new-game", { method: "POST" });
+      const commanders = [...document.querySelectorAll(".pick")].map(sel => sel.value);
+      const res = await fetch("/api/new-game", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commanders }),
+      });
       const data = await res.json();
+      if (!res.ok) {
+        board.textContent = data.error || "Could not start a game.";
+        return;
+      }
       data.decks.forEach((deck, idx) => board.appendChild(buildDeck(deck, idx)));
+    }
+
+    async function loadCommanders() {
+      const res = await fetch("/api/commanders");
+      const list = await res.json();
+      document.querySelectorAll(".pick").forEach(sel => {
+        sel.append(new Option("Random deck", ""));
+        list.forEach(c => sel.append(new Option(`${c.name} (${c.decks})`, c.name)));
+      });
     }
 
     function buildDeck(deck, idx) {
@@ -273,7 +310,7 @@
     }
 
     document.getElementById("new-game").onclick = newGame;
-    newGame();
+    loadCommanders().catch(() => {}).then(newGame);
   </script>
 </body>
 </html>

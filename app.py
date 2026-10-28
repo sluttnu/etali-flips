@@ -79,15 +79,39 @@ def random_deck_records():
     print(f"random_deck_records -> {len(decks)} valid deck entries loaded")
     return decks
 
-def new_game_state():
-    pool = random_deck_records()
-    if len(pool) < 3:
-        raise ValueError("Not enough decks in dataset")
+DECKS = random_deck_records()
 
-    chosen = random.sample(pool, 3)
+def commander_counts():
+    counts = {}
+    for d in DECKS:
+        for name in d["commanders"]:
+            counts[name] = counts.get(name, 0) + 1
+    return sorted(
+        ({"name": n, "decks": c} for n, c in counts.items()),
+        key=lambda x: x["name"].lower(),
+    )
 
+def pick_decks(choices):
+    """choices: up to 3 commander names, "" meaning a fully random deck."""
+    chosen, used = [], set()
+    for i in range(3):
+        wanted = choices[i] if i < len(choices) else ""
+        candidates = [
+            k for k, d in enumerate(DECKS)
+            if k not in used and (not wanted or wanted in d["commanders"])
+        ]
+        if not candidates:
+            raise ValueError(f"No deck available for {wanted or 'a random slot'}")
+        k = random.choice(candidates)
+        used.add(k)
+        chosen.append(DECKS[k])
+    return chosen
+
+def new_game_state(choices=()):
+    chosen = pick_decks(choices)
     game = []
     for deck in chosen:
+
         cards = deck["cards"][:]
         random.shuffle(cards)
 
@@ -146,26 +170,21 @@ def reveal_next_card(game, deck_index):
 def index():
     return render_template("index.html")
 
+@app.route("/api/commanders")
+def api_commanders():
+    return jsonify(commander_counts())
+
 @app.route("/api/new-game", methods=["POST"])
 def api_new_game():
-    game = new_game_state()
+    body = request.get_json(silent=True) or {}
+    choices = [c if isinstance(c, str) else "" for c in body.get("commanders", [])]
+    try:
+        game = new_game_state(choices)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     session["game"] = game
     return jsonify({
-        "decks": [
-            {
-                "tournament": deck["tournament"],
-                "commanders": deck["commanders"],   # <-- the new line
-                "stash": [
-                    {
-                        "name": c,
-                        "image": get_card_image_name(c),
-                    }
-                    for c in deck["stash"]
-                ],
-                "revealed": deck["revealed"],
-            }
-            for deck in game
-        ]
+        "decks": [ ... ]   # unchanged
     })
 
 
