@@ -1,6 +1,6 @@
 import json, os, random, re, threading, pathlib, time
 from urllib.parse import quote, quote_plus
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, jsonify, render_template, request, session, send_from_directory
 
 import requests
 
@@ -196,6 +196,11 @@ def api_new_game():
     })
 
 @app.route("/api/reveal", methods=["POST"])
+
+@app.route("/cardback.jpg")
+def cardback():
+    return send_from_directory("templates", "cardback.jpg")
+
 def api_reveal():
     deck_index = int(request.json["deck_index"])
     game = session.get("game")
