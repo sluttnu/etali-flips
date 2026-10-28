@@ -15,6 +15,15 @@ services:
       - ./data:/app/data
     networks:
       - proxy
+  data-generation:
+    image: ghcr.io/sluttnu/etali-flips:${TAG:-latest}
+    container_name: data-generation
+    command: python data-generation.py
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    profiles: ["jobs"]
 
 networks:
   proxy:
