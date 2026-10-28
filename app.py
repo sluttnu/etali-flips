@@ -199,7 +199,7 @@ def api_new_game():
 
 @app.route("/cardback.jpg")
 def cardback():
-    return send_from_directory("cardback.jpg")
+    return send_from_directory(".","cardback.jpg")
 
 def api_reveal():
     deck_index = int(request.json["deck_index"])
