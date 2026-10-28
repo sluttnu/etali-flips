@@ -1,122 +1,299 @@
 <!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Etali Flips</title>
-    <style>
-      body {
-        font-family: sans-serif;
-        background: #111827;
-        color: #f3f4f6;
-        margin: 0;
-        padding: 32px;
-      }
-      .board {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(220px, 1fr));
-        gap: 24px;
-      }
-      .deck {
-        background: #1f2937;
-        border-radius: 12px;
-        padding: 16px;
-        border: 1px solid #374151;
-      }
-      .deck h3 {
-        margin-top: 0;
-      }
-      .card-preview {
-        width: 100%;
-        max-width: 180px;
-        display: block;
-        margin: 12px auto;
-        border-radius: 10px;
-        background: #0f172a;
-      }
-      button {
-        width: 100%;
-        padding: 10px 14px;
-        border: none;
-        border-radius: 8px;
-        background: #3b82f6;
-        color: white;
-        font-weight: bold;
-        cursor: pointer;
-      }
-      .revealed {
-        margin-top: 12px;
-        font-size: 0.9rem;
-        color: #d1d5db;
-      }
-    </style>
-  </head>
-  <body>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Etali Flips</title>
+  <style>
+    :root {
+      --felt: #14262a;
+      --felt-deep: #0e1b1e;
+      --panel: #1b3338;
+      --edge: #2c4a50;
+      --ink: #eae6d8;
+      --ink-dim: #9fb3b3;
+      --gold: #d9a441;
+      --card-w: 300px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px 32px 56px;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse at 50% -10%, #1e3a40 0%, var(--felt) 45%, var(--felt-deep) 100%);
+      background-attachment: fixed;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      max-width: 1500px;
+      margin: 0 auto 28px;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 600;
+      font-size: 2rem;
+      letter-spacing: 0.01em;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(var(--card-w), 1fr));
+      gap: 28px;
+      max-width: 1500px;
+      margin: 0 auto;
+    }
+
+    .deck {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 20px 18px 18px;
+      background: var(--panel);
+      border: 1px solid var(--edge);
+      border-radius: 14px;
+    }
+
+    .deck h2 {
+      margin: 0;
+      width: 100%;
+      min-height: 2.6em;
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.3;
+      color: var(--ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Card slot: MTG cards are 63 x 88 mm */
+    .card {
+      width: min(100%, var(--card-w));
+      aspect-ratio: 63 / 88;
+      border-radius: 4.5% / 3.3%;
+      background: #0b1416 center / cover no-repeat;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+      perspective: 900px;
+      overflow: hidden;
+    }
+
+    .card img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.16s ease-in;
+    }
+
+    .card img.turning { transform: scaleX(0); }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: min(100%, var(--card-w));
+    }
+
+    .count {
+      font-size: 0.85rem;
+      color: var(--ink-dim);
+    }
+
+    button {
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--gold);
+      background: transparent;
+      color: var(--gold);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+
+    button:hover:not(:disabled) { background: var(--gold); color: #1a1405; }
+    button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    button.quiet {
+      border-color: var(--edge);
+      color: var(--ink-dim);
+    }
+    button.quiet:hover:not(:disabled) { background: var(--edge); color: var(--ink); }
+
+    .history {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      width: min(100%, var(--card-w));
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .history button {
+      padding: 2px 9px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      border-color: var(--edge);
+      color: var(--ink-dim);
+    }
+    .history button:hover { background: var(--edge); color: var(--ink); }
+    .history button[aria-current="true"] { border-color: var(--gold); color: var(--ink); }
+
+    .empty {
+      width: min(100%, var(--card-w));
+      font-size: 0.8rem;
+      color: var(--ink-dim);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card img { transition: none; }
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 20px 16px 40px; }
+      :root { --card-w: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
     <h1>Etali Flips</h1>
+    <button id="new-game" class="quiet" type="button">New game</button>
+  </header>
 
-    <div id="board" class="board"></div>
+  <main id="board" class="board"></main>
 
-    <script>
-      async function newGame() {
-        const res = await fetch("/api/new-game", { method: "POST" });
-        const data = await res.json();
-        renderGame(data.decks);
+  <script>
+    const CARD_BACK = "cardback.jpg";
+    const board = document.getElementById("board");
+
+    async function newGame() {
+      board.textContent = "";
+      const res = await fetch("/api/new-game", { method: "POST" });
+      const data = await res.json();
+      data.decks.forEach((deck, idx) => board.appendChild(buildDeck(deck, idx)));
+    }
+
+    function buildDeck(deck, idx) {
+      // Per-deck state. Cards revealed before page load (if any) have names only.
+      const history = (deck.revealed || []).map(name => ({ name, image: "" }));
+      let exhausted = false;
+
+      const el = document.createElement("section");
+      el.className = "deck";
+
+      const title = document.createElement("h2");
+      title.textContent = deck.tournament;
+      title.title = deck.tournament;
+
+      // Always start face-down: never show deck.stash up front.
+      const cardEl = document.createElement("div");
+      cardEl.className = "card";
+      const img = document.createElement("img");
+      img.src = CARD_BACK;
+      img.alt = "Face-down card";
+      cardEl.appendChild(img);
+
+      const controls = document.createElement("div");
+      controls.className = "controls";
+      const count = document.createElement("span");
+      count.className = "count";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Reveal";
+      controls.append(count, button);
+
+      const list = document.createElement("ul");
+      list.className = "history";
+      const empty = document.createElement("p");
+      empty.className = "empty";
+
+      function showImage(src, alt) {
+        // Quick flip: squash to nothing, swap the source, expand again.
+        img.classList.add("turning");
+        setTimeout(() => {
+          img.src = src || CARD_BACK;
+          img.alt = alt;
+          img.classList.remove("turning");
+        }, 160);
       }
 
-      function renderGame(decks) {
-        const board = document.getElementById("board");
-        board.innerHTML = "";
-
-        decks.forEach((deck, idx) => {
-          const deckEl = document.createElement("div");
-          deckEl.className = "deck";
-
-          const title = document.createElement("h3");
-          title.textContent = deck.tournament;
-          deckEl.appendChild(title);
-
-          const img = document.createElement("img");
-          img.className = "card-preview";
-          img.src = deck.stash[0]?.image || "";
-          img.alt = deck.stash[0]?.name || "card";
-          deckEl.appendChild(img);
-
-          const button = document.createElement("button");
-          button.textContent = "Reveal next card";
-          button.onclick = async () => {
-            const res = await fetch("/api/reveal", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ deck_index: idx })
-            });
-            const result = await res.json();
-
-            if (!result || result.error) {
-              alert("No card left");
-              return;
-            }
-
-            // Update the visible card with the newly drawn one
-            const cardImg = deckEl.querySelector("img");
-            cardImg.src = result.image;
-            cardImg.alt = result.card;
-
-            const revealed = document.createElement("div");
-            revealed.className = "revealed";
-            revealed.textContent = `Revealed: ${result.card}`;
-            deckEl.appendChild(revealed);
+      function renderMeta(activeIndex) {
+        count.textContent = history.length
+          ? `${history.length} revealed`
+          : "Nothing revealed yet";
+        list.textContent = "";
+        history.forEach((entry, i) => {
+          const li = document.createElement("li");
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.textContent = entry.name;
+          if (i === activeIndex) chip.setAttribute("aria-current", "true");
+          chip.onclick = () => {
+            if (!entry.image) return;
+            showImage(entry.image, entry.name);
+            renderMeta(i);
           };
-          deckEl.appendChild(button);
-
-          const revealedList = document.createElement("div");
-          revealedList.className = "revealed";
-          revealedList.textContent = "Revealed so far: " + (deck.revealed.length ? deck.revealed.join(", ") : "none");
-          deckEl.appendChild(revealedList);
-
-          board.appendChild(deckEl);
+          li.appendChild(chip);
+          list.appendChild(li);
         });
+        empty.hidden = history.length > 0 || !exhausted;
+        button.disabled = exhausted;
       }
 
-      newGame();
-    </script>
-  </body>
+      button.onclick = async () => {
+        button.disabled = true;
+        try {
+          const res = await fetch("/api/reveal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deck_index: idx }),
+          });
+          const result = await res.json();
+
+          if (!result || result.error) {
+            exhausted = true;
+            empty.textContent = "No cards left in this library.";
+            empty.hidden = false;
+            renderMeta(history.length - 1);
+            return;
+          }
+
+          history.push({ name: result.card, image: result.image });
+          showImage(result.image, result.card);
+          renderMeta(history.length - 1);
+        } catch (err) {
+          empty.textContent = "Reveal failed. Is the server running?";
+          empty.hidden = false;
+          button.disabled = false;
+        }
+      };
+
+      empty.hidden = true;
+      renderMeta(-1);
+      el.append(title, cardEl, controls, list, empty);
+      return el;
+    }
+
+    document.getElementById("new-game").onclick = newGame;
+    newGame();
+  </script>
+</body>
 </html>
