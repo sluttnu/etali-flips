@@ -1,0 +1,22 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+    uses: sluttnu/common-workflows/.github/workflows/build.yml@main
+    secrets:
+      DEPLOY_DISPATCH_TOKEN: ${{ secrets.DEPLOY_DISPATCH_TOKEN }}
+    with:
+      app: etali-flips
+      image: ghcr.io/sluttnu/etali-flips
+      context: .
+      dockerfile: Dockerfile
+      dispatch_repo: sluttnu/sluttvps-docker
+      dispatch_event_type: deploy

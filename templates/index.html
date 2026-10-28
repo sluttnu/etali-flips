@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Etali Flips</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        background: #111827;
+        color: #f3f4f6;
+        margin: 0;
+        padding: 32px;
+      }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(220px, 1fr));
+        gap: 24px;
+      }
+      .deck {
+        background: #1f2937;
+        border-radius: 12px;
+        padding: 16px;
+        border: 1px solid #374151;
+      }
+      .deck h3 {
+        margin-top: 0;
+      }
+      .card-preview {
+        width: 100%;
+        max-width: 180px;
+        display: block;
+        margin: 12px auto;
+        border-radius: 10px;
+        background: #0f172a;
+      }
+      button {
+        width: 100%;
+        padding: 10px 14px;
+        border: none;
+        border-radius: 8px;
+        background: #3b82f6;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      .revealed {
+        margin-top: 12px;
+        font-size: 0.9rem;
+        color: #d1d5db;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Etali Flips</h1>
+
+    <div id="board" class="board"></div>
+
+    <script>
+      async function newGame() {
+        const res = await fetch("/api/new-game", { method: "POST" });
+        const data = await res.json();
+        renderGame(data.decks);
+      }
+
+      function renderGame(decks) {
+        const board = document.getElementById("board");
+        board.innerHTML = "";
+
+        decks.forEach((deck, idx) => {
+          const deckEl = document.createElement("div");
+          deckEl.className = "deck";
+
+          const title = document.createElement("h3");
+          title.textContent = deck.tournament;
+          deckEl.appendChild(title);
+
+          const img = document.createElement("img");
+          img.className = "card-preview";
+          img.src = deck.stash[0]?.image || "";
+          img.alt = deck.stash[0]?.name || "card";
+          deckEl.appendChild(img);
+
+          const button = document.createElement("button");
+          button.textContent = "Reveal next card";
+          button.onclick = async () => {
+            const res = await fetch("/api/reveal", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ deck_index: idx })
+            });
+            const result = await res.json();
+
+            if (!result || result.error) {
+              alert("No card left");
+              return;
+            }
+
+            // Update the visible card with the newly drawn one
+            const cardImg = deckEl.querySelector("img");
+            cardImg.src = result.image;
+            cardImg.alt = result.card;
+
+            const revealed = document.createElement("div");
+            revealed.className = "revealed";
+            revealed.textContent = `Revealed: ${result.card}`;
+            deckEl.appendChild(revealed);
+          };
+          deckEl.appendChild(button);
+
+          const revealedList = document.createElement("div");
+          revealedList.className = "revealed";
+          revealedList.textContent = "Revealed so far: " + (deck.revealed.length ? deck.revealed.join(", ") : "none");
+          deckEl.appendChild(revealedList);
+
+          board.appendChild(deckEl);
+        });
+      }
+
+      newGame();
+    </script>
+  </body>
+</html>
