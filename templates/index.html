@@ -5,88 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Etali Flips</title>
   <style>
-    :root {
-      --felt: #14262a;
-      --felt-deep: #0e1b1e;
-      --panel: #1b3338;
-      --edge: #2c4a50;
-      --ink: #eae6d8;
-      --ink-dim: #9fb3b3;
-      --gold: #d9a441;
-      --card-w: 300px;
-    }
+    :root { --card-w: 300px; }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      min-height: 100vh;
-      padding: 28px 32px 56px;
+      padding: 24px 32px 48px;
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      color: var(--ink);
-      background:
-        radial-gradient(ellipse at 50% -10%, #1e3a40 0%, var(--felt) 45%, var(--felt-deep) 100%);
-      background-attachment: fixed;
+      font-size: 15px;
+      color: #e6e6e6;
+      background: #2b2d30;
     }
 
     header {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
-      gap: 16px;
       max-width: 1500px;
-      margin: 0 auto 28px;
+      margin: 0 auto 24px;
     }
 
-    h1 {
-      margin: 0;
-      font-family: Georgia, "Times New Roman", serif;
-      font-weight: 600;
-      font-size: 2rem;
-      letter-spacing: 0.01em;
-    }
+    h1 { margin: 0; font-size: 1.4rem; font-weight: 600; }
 
     .board {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(var(--card-w), 1fr));
-      gap: 28px;
+      gap: 32px;
       max-width: 1500px;
       margin: 0 auto;
+      justify-items: center;
     }
 
-    .deck {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      padding: 20px 18px 18px;
-      background: var(--panel);
-      border: 1px solid var(--edge);
-      border-radius: 14px;
-    }
+    .deck { width: min(100%, var(--card-w)); }
 
     .deck h2 {
-      margin: 0;
-      width: 100%;
-      min-height: 2.6em;
-      font-size: 0.95rem;
-      font-weight: 600;
+      margin: 0 0 10px;
+      font-size: 0.9rem;
+      font-weight: 500;
       line-height: 1.3;
-      color: var(--ink);
+      min-height: 2.6em;
+      color: #b8b8b8;
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
 
-    /* Card slot: MTG cards are 63 x 88 mm */
     .card {
-      width: min(100%, var(--card-w));
+      width: 100%;
       aspect-ratio: 63 / 88;
-      border-radius: 4.5% / 3.3%;
-      background: #0b1416 center / cover no-repeat;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
-      perspective: 900px;
+      border-radius: 4.5% / 3.2%;
+      background: #1d1e20;
       overflow: hidden;
     }
 
@@ -95,106 +65,94 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transition: transform 0.16s ease-in;
+      transition: transform 0.15s ease-in-out;
     }
-
     .card img.turning { transform: scaleX(0); }
 
     .controls {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 12px;
-      width: min(100%, var(--card-w));
+      margin-top: 10px;
     }
 
-    .count {
-      font-size: 0.85rem;
-      color: var(--ink-dim);
-    }
+    .count { font-size: 0.85rem; color: #9a9a9a; }
 
     button {
       font: inherit;
       font-size: 0.85rem;
-      font-weight: 600;
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--gold);
-      background: transparent;
-      color: var(--gold);
+      padding: 4px 12px;
+      border: 1px solid #5a5d62;
+      border-radius: 3px;
+      background: #3a3d41;
+      color: #e6e6e6;
       cursor: pointer;
-      transition: background 0.12s, color 0.12s;
     }
-
-    button:hover:not(:disabled) { background: var(--gold); color: #1a1405; }
-    button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-    button:disabled { opacity: 0.4; cursor: default; }
-
-    button.quiet {
-      border-color: var(--edge);
-      color: var(--ink-dim);
-    }
-    button.quiet:hover:not(:disabled) { background: var(--edge); color: var(--ink); }
+    button:hover:not(:disabled) { background: #46494e; }
+    button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+    button:disabled { opacity: 0.45; cursor: default; }
 
     .history {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      width: min(100%, var(--card-w));
-      margin: 0;
+      margin: 10px 0 0;
       padding: 0;
       list-style: none;
+      font-size: 0.85rem;
     }
-
     .history button {
-      padding: 2px 9px;
-      font-size: 0.78rem;
-      font-weight: 500;
-      border-color: var(--edge);
-      color: var(--ink-dim);
+      border: none;
+      background: none;
+      padding: 2px 0;
+      color: #b8b8b8;
+      text-align: left;
     }
-    .history button:hover { background: var(--edge); color: var(--ink); }
-    .history button[aria-current="true"] { border-color: var(--gold); color: var(--ink); }
+    .history button:hover { background: none; color: #fff; text-decoration: underline; }
+    .history button[aria-current="true"] { color: #fff; font-weight: 600; }
 
-    .empty {
-      width: min(100%, var(--card-w));
-      font-size: 0.8rem;
-      color: var(--ink-dim);
-    }
+    .note { margin: 8px 0 0; font-size: 0.8rem; color: #d9a0a0; }
 
-    @media (prefers-reduced-motion: reduce) {
-      .card img { transition: none; }
-    }
-
-    @media (max-width: 640px) {
-      body { padding: 20px 16px 40px; }
-      :root { --card-w: 260px; }
-    }
+    @media (prefers-reduced-motion: reduce) { .card img { transition: none; } }
+    @media (max-width: 640px) { body { padding: 16px; } :root { --card-w: 260px; } }
   </style>
 </head>
 <body>
   <header>
     <h1>Etali Flips</h1>
-    <button id="new-game" class="quiet" type="button">New game</button>
+    <button id="new-game" type="button">New game</button>
   </header>
 
   <main id="board" class="board"></main>
 
   <script>
-    const CARD_BACK = "cardback.jpg";
+    // Flask serves /static automatically. Put cardback.jpg in /app/static/.
+    const CARD_BACK = "/static/cardback.jpg";
+    const FLIP_MS = 150;
     const board = document.getElementById("board");
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    // Resolves true once the image is fully loaded and decoded, false on failure.
+    function preload(src) {
+      return new Promise(resolve => {
+        if (!src) return resolve(false);
+        const im = new Image();
+        im.onload = () => (im.decode ? im.decode().catch(() => {}) : Promise.resolve()).then(() => resolve(true));
+        im.onerror = () => resolve(false);
+        im.src = src;
+      });
+    }
 
     async function newGame() {
       board.textContent = "";
+      preload(CARD_BACK); // warm the cache so the back shows immediately
       const res = await fetch("/api/new-game", { method: "POST" });
       const data = await res.json();
       data.decks.forEach((deck, idx) => board.appendChild(buildDeck(deck, idx)));
     }
 
     function buildDeck(deck, idx) {
-      // Per-deck state. Cards revealed before page load (if any) have names only.
       const history = (deck.revealed || []).map(name => ({ name, image: "" }));
       let exhausted = false;
+      let busy = false;
 
       const el = document.createElement("section");
       el.className = "deck";
@@ -203,7 +161,7 @@
       title.textContent = deck.tournament;
       title.title = deck.tournament;
 
-      // Always start face-down: never show deck.stash up front.
+      // Always start face-down; never show deck.stash up front.
       const cardEl = document.createElement("div");
       cardEl.className = "card";
       const img = document.createElement("img");
@@ -213,53 +171,61 @@
 
       const controls = document.createElement("div");
       controls.className = "controls";
-      const count = document.createElement("span");
-      count.className = "count";
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = "Reveal";
-      controls.append(count, button);
+      const count = document.createElement("span");
+      count.className = "count";
+      controls.append(button, count);
 
-      const list = document.createElement("ul");
+      const list = document.createElement("ol");
       list.className = "history";
-      const empty = document.createElement("p");
-      empty.className = "empty";
+      const note = document.createElement("p");
+      note.className = "note";
+      note.hidden = true;
 
-      function showImage(src, alt) {
-        // Quick flip: squash to nothing, swap the source, expand again.
+      // Flip out while the new image loads; swap only when BOTH are done.
+      async function showImage(src, alt) {
         img.classList.add("turning");
-        setTimeout(() => {
-          img.src = src || CARD_BACK;
+        const [loaded] = await Promise.all([preload(src), sleep(FLIP_MS)]);
+        if (loaded) {
+          img.src = src;
           img.alt = alt;
-          img.classList.remove("turning");
-        }, 160);
+          note.hidden = true;
+        } else {
+          img.src = CARD_BACK;
+          img.alt = "Face-down card";
+          note.textContent = `Couldn't load the image for ${alt}.`;
+          note.hidden = false;
+        }
+        img.classList.remove("turning");
+        await sleep(FLIP_MS);
       }
 
-      function renderMeta(activeIndex) {
-        count.textContent = history.length
-          ? `${history.length} revealed`
-          : "Nothing revealed yet";
+      function render(activeIndex) {
+        count.textContent = history.length ? `${history.length} revealed` : "";
         list.textContent = "";
         history.forEach((entry, i) => {
           const li = document.createElement("li");
-          const chip = document.createElement("button");
-          chip.type = "button";
-          chip.textContent = entry.name;
-          if (i === activeIndex) chip.setAttribute("aria-current", "true");
-          chip.onclick = () => {
-            if (!entry.image) return;
-            showImage(entry.image, entry.name);
-            renderMeta(i);
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = entry.name;
+          if (i === activeIndex) b.setAttribute("aria-current", "true");
+          b.disabled = busy;
+          b.onclick = async () => {
+            if (!entry.image || busy) return;
+            busy = true; render(i);
+            await showImage(entry.image, entry.name);
+            busy = false; render(i);
           };
-          li.appendChild(chip);
+          li.appendChild(b);
           list.appendChild(li);
         });
-        empty.hidden = history.length > 0 || !exhausted;
-        button.disabled = exhausted;
+        button.disabled = busy || exhausted;
       }
 
       button.onclick = async () => {
-        button.disabled = true;
+        busy = true; render(-1);
         try {
           const res = await fetch("/api/reveal", {
             method: "POST",
@@ -270,25 +236,22 @@
 
           if (!result || result.error) {
             exhausted = true;
-            empty.textContent = "No cards left in this library.";
-            empty.hidden = false;
-            renderMeta(history.length - 1);
-            return;
+            note.textContent = "No cards left in this library.";
+            note.hidden = false;
+          } else {
+            history.push({ name: result.card, image: result.image });
+            await showImage(result.image, result.card);
           }
-
-          history.push({ name: result.card, image: result.image });
-          showImage(result.image, result.card);
-          renderMeta(history.length - 1);
         } catch (err) {
-          empty.textContent = "Reveal failed. Is the server running?";
-          empty.hidden = false;
-          button.disabled = false;
+          note.textContent = "Reveal failed. Is the server running?";
+          note.hidden = false;
         }
+        busy = false;
+        render(history.length - 1);
       };
 
-      empty.hidden = true;
-      renderMeta(-1);
-      el.append(title, cardEl, controls, list, empty);
+      render(-1);
+      el.append(title, cardEl, controls, list, note);
       return el;
     }
 
