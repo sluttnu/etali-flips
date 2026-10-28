@@ -4,9 +4,12 @@ services:
     container_name: etali-flips
     restart: unless-stopped
     tmpfs: [/tmp]
+    env_files:
+      - .env
     volumes:
       - etali-flips:/app/cache
       - ./cardback.jpg:/app/cardback.jpg:ro
+      - ./data:/app/data
     environment:
       PORT: "9000"
     networks: [proxy]

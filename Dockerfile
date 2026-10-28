@@ -1,10 +1,10 @@
-FROM python:3.12-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
-COPY app.py templates/index.html data /app/
 
-ENV PORT=9000
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 9000
+COPY . .
 
-CMD ["python", "/app/app.py"]
+CMD ["python", "app.py"]
