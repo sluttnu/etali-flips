@@ -259,7 +259,6 @@ def pick_decks(choices):
 def average_deck(query):
     keys = match_keys(query)
     if len(keys) > 1:
-        # Ambiguous: let the caller show the options instead of blending them.
         ordered = sorted(keys, key=lambda k: (-KEY_COUNTS[k], k.lower()))
         return {
             "commander": query,
@@ -272,10 +271,15 @@ def average_deck(query):
     n = len(decks)
 
     present, copies = Counter(), Counter()
-    for d in decks:
-        for name, k in Counter(d["cards"]).items():
+    deck_map = {}  # card -> set of deck indexes
+
+    for idx, d in enumerate(decks):
+        deck_counter = Counter(d["cards"])
+        for name in deck_counter:
             present[name] += 1
-            copies[name] += k
+            copies[name] += deck_counter[name]
+
+            deck_map.setdefault(name, set()).add(idx)
 
     ensure_images(list(present))
 
@@ -287,12 +291,31 @@ def average_deck(query):
             "avg_copies": copies[name] / present[name],
             "image": get_card_image_name(name),
             "land": is_land(name),
+            "deck_indexes": sorted(deck_map.get(name, set())),
         }
         for name in present
     ]
-    # Inclusion first; among equal inclusion, nonlands before lands.
+
     cards.sort(key=lambda c: (-c["inclusion"], c["land"], c["name"]))
-    return {"commander": keys[0] if keys else query, "deck_count": n, "cards": cards}
+
+    return {
+        "commander": keys[0] if keys else query,
+        "deck_count": n,
+        "cards": cards,
+        "deck_indexes": list(range(n)),
+        "deck_map": {
+            name: sorted(deck_indexes)
+            for name, deck_indexes in sorted(deck_map.items(), key=lambda kv: kv[0].lower())
+        },
+        "decks": [
+            {
+                "tournament": d["tournament"],
+                "commanders": d["commanders"],
+                "cards": d["cards"],
+            }
+            for d in decks
+        ],
+    }
 
 
 def new_game_state(choices=()):
