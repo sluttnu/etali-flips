@@ -87,13 +87,16 @@ def tournament_timestamp(t):
             continue
     return None
 
-
 def random_deck_records():
     decks = []
     for tournament in DATA:
-        ts = tournament_timestamp(tournament)
         for player in tournament.get("standings") or []:
-            ...
+            parsed = deck_from_player(player)
+            if not parsed:
+                continue
+            commanders, cards = parsed
+            if not cards:
+                continue
             decks.append({
                 "tournament": tournament.get("tournamentName", "Unknown"),
                 "date": ts,
@@ -101,10 +104,10 @@ def random_deck_records():
                 "commander_key": commander_key(commanders),
                 "cards": cards,
             })
-
     undated = sum(1 for d in decks if d["date"] is None)
-    print(f"random_deck_records -> {len(decks)} valid deck entries loaded ({undated} without a date)")
+    print(f"random_deck_records -> {len(decks)} valid deck entries loaded")
     return decks
+
 
 
 DECKS = random_deck_records()
