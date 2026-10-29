@@ -162,7 +162,15 @@
         grid.textContent = data.error || "Could not load the average deck.";
         if (data.choices) {
           const ul = document.createElement("ul");
-          data.choices.forEach(c => {
+
+          const choices = [...data.choices].sort((a, b) => {
+            const byCount = (b.decks ?? 0) - (a.decks ?? 0);
+            return byCount !== 0
+              ? byCount
+              : (a.name || "").localeCompare(b.name || "");
+          });
+
+          choices.forEach(c => {
             const li = document.createElement("li");
             const a = document.createElement("a");
             a.href = "?commander=" + encodeURIComponent(c.name);
@@ -170,6 +178,7 @@
             li.append(a, ` (${c.decks} decks)`);
             ul.appendChild(li);
           });
+
           grid.appendChild(ul);
         }
         return;

@@ -246,11 +246,21 @@
     async function loadCommanders() {
       const res = await fetch("/api/commanders");
       const list = await res.json();
+
+      const sorted = [...list].sort((a, b) => {
+        const byCount = (b.decks ?? 0) - (a.decks ?? 0);
+        return byCount !== 0
+          ? byCount
+          : (a.name || "").localeCompare(b.name || "");
+      });
+
       const dl = document.getElementById("cmds");
-      list.forEach(c => {
+      dl.innerHTML = "";
+
+      sorted.forEach(c => {
         const o = document.createElement("option");
         o.value = c.name;
-        o.label = `${c.decks} decks`;
+        o.label = `${c.name} (${c.decks})`; // shows: "Jhoira, Ageless Innovator (8)"
         dl.appendChild(o);
       });
     }

@@ -234,7 +234,7 @@ def match_keys(query):
 def commander_counts():
     return sorted(
         ({"name": k, "decks": n} for k, n in KEY_COUNTS.items()),
-        key=lambda x: x["name"].lower(),
+        key=lambda x: (-int(x["decks"]), str(x["name"]).lower()),
     )
 
 
@@ -260,9 +260,12 @@ def average_deck(query):
     keys = match_keys(query)
     if len(keys) > 1:
         # Ambiguous: let the caller show the options instead of blending them.
+        ordered = sorted(keys, key=lambda k: (-KEY_COUNTS[k], k.lower()))
         return {
-            "commander": query, "deck_count": 0, "cards": [],
-            "choices": [{"name": k, "decks": KEY_COUNTS[k]} for k in keys],
+            "commander": query,
+            "deck_count": 0,
+            "cards": [],
+            "choices": [{"name": k, "decks": KEY_COUNTS[k]} for k in ordered],
         }
 
     decks = [d for d in DECKS if keys and d["commander_key"] == keys[0]]
