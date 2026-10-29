@@ -122,8 +122,8 @@
 </head>
 <body>
   <header>
-    <a class="back" href="/">&larr; Etali Flips</a>
-    <div class="titlerow"><h1 id="title">Average deck</h1><span class="info" tabindex="0" aria-describedby="info-tip" aria-label="About this data">?<span class="tip" id="info-tip" role="tooltip">Loading&hellip;</span></span></div>
+    {% if not standalone %}<a class="back" href="/">&larr; Etali Flips</a>{% endif %}
+    <div class="titlerow"><span id="mtg-menu"></span><h1 id="title">Average deck</h1><span class="info" tabindex="0" aria-describedby="info-tip" aria-label="About this data">?<span class="tip" id="info-tip" role="tooltip">Loading&hellip;</span></span></div>
     <p class="sub" id="sub">Loading&hellip;</p>
     <form id="search" class="search">
       <input id="q" list="cmds" placeholder="Search commanders" autocomplete="off" />
@@ -136,6 +136,9 @@
 
   <script>
     const grid = document.getElementById("grid");
+    const DEFAULT_COMMANDER = {{ default_commander|tojson }};
+    const commander = (new URLSearchParams(location.search).get("commander")
+                       || DEFAULT_COMMANDER).trim();
 
     function pctLabel(x) {
       const p = x * 100;
@@ -143,8 +146,12 @@
     }
 
     async function load() {
-      // Passes ?commander=... through, so other commanders work too.
-      const res = await fetch("/api/average-deck" + location.search);
+      if (!commander) {
+        document.getElementById("sub").textContent =
+          "Search for a commander to see its average deck.";
+        return;
+      }
+      const res = await fetch("/api/average-deck?commander=" + encodeURIComponent(commander));
       const data = await res.json();
 
       if (!res.ok) {
@@ -185,8 +192,7 @@
       });
     }
 
-    document.getElementById("q").value =
-      new URLSearchParams(location.search).get("commander") || "";
+    document.getElementById("q").value = commander;
 
     document.getElementById("search").onsubmit = e => {
       e.preventDefault();
@@ -218,5 +224,6 @@
     loadCommanders().catch(() => {});
     load();
   </script>
+  <script src="/_widgets/mtg-menu.js" defer></script>
 </body>
 </html>

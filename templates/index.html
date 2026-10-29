@@ -194,7 +194,7 @@
 </head>
 <body>
   <header>
-    <div class="titlerow"><h1>Etali Flips</h1><span class="info" tabindex="0" aria-describedby="info-tip" aria-label="About this data">?<span class="tip" id="info-tip" role="tooltip">Loading&hellip;</span></span></div>
+    <div class="titlerow"><span id="mtg-menu"></span><h1>Etali Flips</h1><span class="info" tabindex="0" aria-describedby="info-tip" aria-label="About this data">?<span class="tip" id="info-tip" role="tooltip">Loading&hellip;</span></span></div>
     <div class="setup">
       <input class="pick" list="cmds" placeholder="Random deck" autocomplete="off" aria-label="Deck 1 commander" />
       <input class="pick" list="cmds" placeholder="Random deck" autocomplete="off" aria-label="Deck 2 commander" />
@@ -381,5 +381,6 @@
     loadInfo().catch(() => {});
     loadCommanders().catch(() => {}).then(newGame);
   </script>
+  <script src="/_widgets/mtg-menu.js" defer></script>
 </body>
 </html>

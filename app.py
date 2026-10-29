@@ -10,6 +10,18 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
 DATA_DIR = pathlib.Path("data")
 ETALI = "Etali, Primal Conqueror"
 
+# Hostnames (first label) that get the standalone average-deck site.
+STANDALONE_HOSTS = {
+    h.strip().lower()
+    for h in os.getenv("STANDALONE_HOSTS", "average-deck,average-decks").split(",")
+    if h.strip()
+}
+
+
+def is_standalone():
+    host = request.host.split(":")[0].lower()
+    return host.split(".")[0] in STANDALONE_HOSTS
+
 
 # --------------------------------------------------------------------------
 # Dataset (tournament standings pulled by data_generation.py)
@@ -307,17 +319,26 @@ def reveal_next_card(game, deck_index):
 
 @app.route("/")
 def index():
+    if is_standalone():
+        return average_deck_page()
     return render_template("index.html")
 
 
 @app.route("/average-deck")
 def average_deck_page():
-    return render_template("average_deck.html")
+    standalone = is_standalone()
+    return render_template(
+        "average_deck.html",
+        standalone=standalone,
+        default_commander="" if standalone else ETALI,
+    )
 
 
 @app.route("/api/average-deck")
 def api_average_deck():
-    query = request.args.get("commander", "").strip() or ETALI
+    query = request.args.get("commander", "").strip()
+    if not query:
+        return jsonify({"error": "Pass ?commander=<name>"}), 400
     data = average_deck(query)
     if not data["deck_count"]:
         return jsonify({"error": f"No decks found for {query}"}), 404
