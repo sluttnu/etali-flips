@@ -51,13 +51,18 @@ def load_dataset():
 DATA = load_dataset()
 
 
+def commander_key(commanders):
+    """Canonical name for a commander combination, e.g. 'Kraum... + Tymna...'."""
+    return " + ".join(sorted(commanders, key=str.lower))
+
+
 def deck_from_player(player):
     """Return (commanders, library_cards) from a standings entry, or None."""
     deck_obj = player.get("deckObj")
     if not isinstance(deck_obj, dict):
         return None
 
-    commanders = list((deck_obj.get("Commanders") or {}).keys())
+    commanders = sorted((deck_obj.get("Commanders") or {}).keys(), key=str.lower)
 
     cards = []
     for name, info in (deck_obj.get("Mainboard") or {}).items():
@@ -79,6 +84,7 @@ def random_deck_records():
             decks.append({
                 "tournament": tournament.get("tournamentName", "Unknown"),
                 "commanders": commanders,
+                "commander_key": commander_key(commanders),
                 "cards": cards,
             })
 
@@ -87,6 +93,7 @@ def random_deck_records():
 
 
 DECKS = random_deck_records()
+KEY_COUNTS = Counter(d["commander_key"] for d in DECKS if d["commander_key"])
 
 
 # --------------------------------------------------------------------------
@@ -207,26 +214,39 @@ threading.Thread(target=backfill_images, daemon=True).start()
 # Deck selection, average deck, game state
 # --------------------------------------------------------------------------
 
+def normalize_query(q):
+    """'B + A' and 'A + B' name the same combination; compare case-insensitively."""
+    parts = [p.strip() for p in q.split("+") if p.strip()]
+    return " + ".join(sorted(parts, key=str.lower)).lower()
+
+
+def match_keys(query):
+    """Commander combinations matching a query: an exact match wins, else substring."""
+    q = normalize_query(query)
+    if not q:
+        return []
+    exact = [k for k in KEY_COUNTS if k.lower() == q]
+    if exact:
+        return exact
+    return sorted((k for k in KEY_COUNTS if q in k.lower()), key=str.lower)
+
+
 def commander_counts():
-    counts = {}
-    for d in DECKS:
-        for name in d["commanders"]:
-            counts[name] = counts.get(name, 0) + 1
     return sorted(
-        ({"name": n, "decks": c} for n, c in counts.items()),
+        ({"name": k, "decks": n} for k, n in KEY_COUNTS.items()),
         key=lambda x: x["name"].lower(),
     )
 
 
 def pick_decks(choices):
-    """choices: up to 3 commander names, "" meaning a fully random deck."""
+    """choices: up to 3 commander names/combinations, "" meaning a fully random deck."""
     chosen, used = [], set()
     for i in range(3):
-        wanted = (choices[i] if i < len(choices) else "").strip().lower()
+        wanted = (choices[i] if i < len(choices) else "").strip()
+        keys = set(match_keys(wanted)) if wanted else None
         candidates = [
             k for k, d in enumerate(DECKS)
-            if k not in used
-            and (not wanted or any(wanted in c.lower() for c in d["commanders"]))
+            if k not in used and (keys is None or d["commander_key"] in keys)
         ]
         if not candidates:
             raise ValueError(f"No deck available for {wanted or 'a random slot'}")
@@ -236,9 +256,16 @@ def pick_decks(choices):
     return chosen
 
 
-def average_deck(query=ETALI):
-    q = query.lower()
-    decks = [d for d in DECKS if any(q in c.lower() for c in d["commanders"])]
+def average_deck(query):
+    keys = match_keys(query)
+    if len(keys) > 1:
+        # Ambiguous: let the caller show the options instead of blending them.
+        return {
+            "commander": query, "deck_count": 0, "cards": [],
+            "choices": [{"name": k, "decks": KEY_COUNTS[k]} for k in keys],
+        }
+
+    decks = [d for d in DECKS if keys and d["commander_key"] == keys[0]]
     n = len(decks)
 
     present, copies = Counter(), Counter()
@@ -262,7 +289,7 @@ def average_deck(query=ETALI):
     ]
     # Inclusion first; among equal inclusion, nonlands before lands.
     cards.sort(key=lambda c: (-c["inclusion"], c["land"], c["name"]))
-    return {"commander": query, "deck_count": n, "cards": cards}
+    return {"commander": keys[0] if keys else query, "deck_count": n, "cards": cards}
 
 
 def new_game_state(choices=()):
@@ -340,6 +367,11 @@ def api_average_deck():
     if not query:
         return jsonify({"error": "Pass ?commander=<name>"}), 400
     data = average_deck(query)
+    if data.get("choices"):
+        return jsonify({
+            "error": f'"{query}" matches several commander combinations. Pick one:',
+            "choices": data["choices"],
+        }), 400
     if not data["deck_count"]:
         return jsonify({"error": f"No decks found for {query}"}), 404
     return jsonify(data)

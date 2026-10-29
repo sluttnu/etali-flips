@@ -118,6 +118,8 @@
     .pct small { font-weight: 400; color: #b8b8b8; margin-left: 4px; }
 
     .error { max-width: 1500px; margin: 0 auto; color: #d9a0a0; }
+    .error ul { margin: 10px 0 0; padding-left: 20px; color: #e6e6e6; line-height: 1.7; }
+    .error a { color: #e6e6e6; }
   </style>
 </head>
 <body>
@@ -158,6 +160,18 @@
         document.getElementById("sub").textContent = "";
         grid.className = "error";
         grid.textContent = data.error || "Could not load the average deck.";
+        if (data.choices) {
+          const ul = document.createElement("ul");
+          data.choices.forEach(c => {
+            const li = document.createElement("li");
+            const a = document.createElement("a");
+            a.href = "?commander=" + encodeURIComponent(c.name);
+            a.textContent = c.name;
+            li.append(a, ` (${c.decks} decks)`);
+            ul.appendChild(li);
+          });
+          grid.appendChild(ul);
+        }
         return;
       }
 

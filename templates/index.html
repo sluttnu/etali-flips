@@ -278,7 +278,7 @@
 
       const commanders = document.createElement("p");
       commanders.className = "commanders";
-      commanders.textContent = (deck.commanders || []).join(" / ");
+      commanders.textContent = (deck.commanders || []).join(" + ");
       commanders.title = commanders.textContent;
 
       // Always start face-down; never show deck.stash up front.
