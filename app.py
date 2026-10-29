@@ -1,14 +1,79 @@
-import json, os, random, re, threading, pathlib, time
-from urllib.parse import quote, quote_plus
-from flask import Flask, jsonify, render_template, request, session, send_from_directory
+import json, os, random, threading, pathlib, time
 from collections import Counter
 
 import requests
+from flask import Flask, jsonify, render_template, request, session, send_from_directory
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
 
 DATA_DIR = pathlib.Path("data")
+ETALI = "Etali, Primal Conqueror"
+
+
+# --------------------------------------------------------------------------
+# Dataset (tournament standings pulled by data_generation.py)
+# --------------------------------------------------------------------------
+
+def dataset_path():
+    days = int(os.getenv("DAYS", 180))
+    min_players = int(os.getenv("MIN_PLAYERS", 32))
+    min_swiss = int(os.getenv("MIN_SWISS", 4))
+    return DATA_DIR / f"standings_{days}d_p{min_players}_swiss{min_swiss}.json"
+
+
+def load_dataset():
+    path = dataset_path()
+    if not path.exists():
+        raise FileNotFoundError(f"Dataset not found: {path}")
+    with path.open() as f:
+        return json.load(f)
+
+
+DATA = load_dataset()
+
+
+def deck_from_player(player):
+    """Return (commanders, library_cards) from a standings entry, or None."""
+    deck_obj = player.get("deckObj")
+    if not isinstance(deck_obj, dict):
+        return None
+
+    commanders = list((deck_obj.get("Commanders") or {}).keys())
+
+    cards = []
+    for name, info in (deck_obj.get("Mainboard") or {}).items():
+        cards.extend([name] * int((info or {}).get("count", 1)))
+
+    return commanders, cards
+
+
+def random_deck_records():
+    decks = []
+    for tournament in DATA:
+        for player in tournament.get("standings") or []:
+            parsed = deck_from_player(player)
+            if not parsed:
+                continue
+            commanders, cards = parsed
+            if not cards:
+                continue
+            decks.append({
+                "tournament": tournament.get("tournamentName", "Unknown"),
+                "commanders": commanders,
+                "cards": cards,
+            })
+
+    print(f"random_deck_records -> {len(decks)} valid deck entries loaded")
+    return decks
+
+
+DECKS = random_deck_records()
+
+
+# --------------------------------------------------------------------------
+# Scryfall card info (image URL + front-face type), cached on disk
+# --------------------------------------------------------------------------
 
 INFO_FILE = DATA_DIR / "card_info.json"
 CARD_INFO = json.loads(INFO_FILE.read_text()) if INFO_FILE.exists() else {}
@@ -20,8 +85,10 @@ SCRY_HEADERS = {
 }
 _last_call = 0.0
 
+
 def image_key(name):
     return name.strip().lower()
+
 
 def _scry_post(identifiers):
     """One rate-limited call to /cards/collection (max 75 identifiers)."""
@@ -44,11 +111,13 @@ def _scry_post(identifiers):
         return r.json()
     raise RuntimeError("Scryfall kept rate limiting us")
 
+
 def _card_image(card):
     uris = card.get("image_uris") or (
         (card.get("card_faces") or [{}])[0].get("image_uris")
     ) or {}
     return uris.get("normal")
+
 
 def ensure_images(names):
     """Resolve image URL + front-face type for uncached names, 75 at a time."""
@@ -56,6 +125,7 @@ def ensure_images(names):
                    if image_key(n) not in CARD_INFO and n not in MISSING})
     for i in range(0, len(todo), 75):
         with SCRY_LOCK:
+            # Re-check inside the lock: another thread may have filled these in.
             batch = [n for n in todo[i:i + 75]
                      if image_key(n) not in CARD_INFO and n not in MISSING]
             if not batch:
@@ -76,7 +146,7 @@ def ensure_images(names):
                     }
                     full = card["name"].lower()
                     found[full] = info
-                    found[full.split(" // ")[0]] = info
+                    found[full.split(" // ")[0]] = info   # front-face lookups
 
             for n in batch:
                 k = image_key(n)
@@ -88,6 +158,7 @@ def ensure_images(names):
 
             INFO_FILE.write_text(json.dumps(CARD_INFO))
 
+
 def card_info(name):
     info = CARD_INFO.get(image_key(name))
     if not info:
@@ -95,46 +166,14 @@ def card_info(name):
         info = CARD_INFO.get(image_key(name))
     return info or {}
 
+
 def get_card_image_name(name):
     return card_info(name).get("image", "")
+
 
 def is_land(name):
     return "Land" in card_info(name).get("type", "")
 
-def deck_from_player(player):
-    """Return (commanders, library_cards) from a standings entry, or None."""
-    deck_obj = player.get("deckObj")
-    if not isinstance(deck_obj, dict):
-        return None
-
-    commanders = list((deck_obj.get("Commanders") or {}).keys())
-
-    cards = []
-    for name, info in (deck_obj.get("Mainboard") or {}).items():
-        cards.extend([name] * int((info or {}).get("count", 1)))
-
-    return commanders, cards
-
-def random_deck_records():
-    decks = []
-    for tournament in DATA:
-        for player in tournament.get("standings") or []:
-            parsed = deck_from_player(player)
-            if not parsed:
-                continue
-            commanders, cards = parsed
-            if not cards:
-                continue
-            decks.append({
-                "tournament": tournament.get("tournamentName", "Unknown"),
-                "commanders": commanders,
-                "cards": cards,
-            })
-
-    print(f"random_deck_records -> {len(decks)} valid deck entries loaded")
-    return decks
-
-DECKS = random_deck_records()
 
 def backfill_images():
     names = {n for d in DECKS for n in d["cards"]}
@@ -142,7 +181,13 @@ def backfill_images():
     ensure_images(names)
     print("image backfill done")
 
+
 threading.Thread(target=backfill_images, daemon=True).start()
+
+
+# --------------------------------------------------------------------------
+# Deck selection, average deck, game state
+# --------------------------------------------------------------------------
 
 def commander_counts():
     counts = {}
@@ -153,6 +198,7 @@ def commander_counts():
         ({"name": n, "decks": c} for n, c in counts.items()),
         key=lambda x: x["name"].lower(),
     )
+
 
 def pick_decks(choices):
     """choices: up to 3 commander names, "" meaning a fully random deck."""
@@ -170,7 +216,6 @@ def pick_decks(choices):
         chosen.append(DECKS[k])
     return chosen
 
-ETALI = "Etali, Primal Conqueror"
 
 def average_deck(query=ETALI):
     q = query.lower()
@@ -196,14 +241,15 @@ def average_deck(query=ETALI):
         }
         for name in present
     ]
+    # Inclusion first; among equal inclusion, nonlands before lands.
     cards.sort(key=lambda c: (-c["inclusion"], c["land"], c["name"]))
     return {"commander": query, "deck_count": n, "cards": cards}
+
 
 def new_game_state(choices=()):
     chosen = pick_decks(choices)
     game = []
     for deck in chosen:
-
         cards = deck["cards"][:]
         random.shuffle(cards)
 
@@ -220,8 +266,8 @@ def new_game_state(choices=()):
         })
 
     ensure_images([c for deck in game for c in deck["stash"]])
-
     return game
+
 
 def reveal_next_card(game, deck_index):
     deck = game[deck_index]
@@ -233,16 +279,11 @@ def reveal_next_card(game, deck_index):
 
     # refill stash to 5 cards once a card is revealed
     while len(deck["stash"]) < 5 and deck["remaining"]:
-        next_name = deck["remaining"].pop(0)
-        deck["stash"].append(next_name)
+        deck["stash"].append(deck["remaining"].pop(0))
 
-    # also prefetch art for the newly-added replacement card
+    # make sure art exists for the newly added card
     if deck["stash"]:
-        newest = deck["stash"][-1]
-        try:
-            get_card_image_name(newest)
-        except Exception:
-            pass
+        get_card_image_name(deck["stash"][-1])
 
     return {
         "card": card_name,
@@ -252,25 +293,34 @@ def reveal_next_card(game, deck_index):
         "stash": deck["stash"],
     }
 
+
+# --------------------------------------------------------------------------
+# Routes
+# --------------------------------------------------------------------------
+
 @app.route("/")
 def index():
     return render_template("index.html")
+
 
 @app.route("/average-deck")
 def average_deck_page():
     return render_template("average_deck.html")
 
+
 @app.route("/api/average-deck")
 def api_average_deck():
-    prefix = request.args.get("commander", ETALI)
-    data = average_deck(prefix)
+    query = request.args.get("commander", "").strip() or ETALI
+    data = average_deck(query)
     if not data["deck_count"]:
-        return jsonify({"error": f"No decks found for {prefix}"}), 404
+        return jsonify({"error": f"No decks found for {query}"}), 404
     return jsonify(data)
+
 
 @app.route("/api/commanders")
 def api_commanders():
     return jsonify(commander_counts())
+
 
 @app.route("/api/new-game", methods=["POST"])
 def api_new_game():
@@ -299,22 +349,31 @@ def api_new_game():
 
 @app.route("/cardback.jpg")
 def cardback():
-    return send_from_directory(".","cardback.jpg")
+    # Serve from the app folder, or from templates/ if the file lives there.
+    for folder in (".", "templates"):
+        if (pathlib.Path(folder) / "cardback.jpg").exists():
+            return send_from_directory(folder, "cardback.jpg")
+    return ("cardback.jpg not found", 404)
+
 
 @app.route("/api/reveal", methods=["POST"])
 def api_reveal():
-    deck_index = int(request.json["deck_index"])
     game = session.get("game")
     if not game:
         return jsonify({"error": "No game in session"}), 400
+
+    deck_index = int((request.get_json(silent=True) or {}).get("deck_index", -1))
+    if not 0 <= deck_index < len(game):
+        return jsonify({"error": "Bad deck index"}), 400
 
     result = reveal_next_card(game, deck_index)
     session["game"] = game
     return jsonify(result)
 
+
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.getenv("PORT", "5000")),
-        debug=False
+        debug=False,
     )
