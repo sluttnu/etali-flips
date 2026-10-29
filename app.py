@@ -199,6 +199,21 @@ def get_card_image_name(name):
 def is_land(name):
     return "Land" in card_info(name).get("type", "")
 
+# Lower = sorts earlier. Lands are always last; "other" non-lands sit just before them.
+TYPE_ORDER = ["Creature", "Artifact", "Enchantment", "Instant", "Sorcery"]
+OTHER_RANK = len(TYPE_ORDER)       # planeswalkers, battles, unmatched cards, ...
+LAND_RANK = OTHER_RANK + 1
+
+
+def type_rank(name):
+    t = card_info(name).get("type", "")
+    if "Land" in t:               # check first so Artifact Land / Dryad Arbor count as lands
+        return LAND_RANK
+    for i, word in enumerate(TYPE_ORDER):
+        if word in t:             # first match wins, so Artifact Creature -> Creature
+            return i
+    return OTHER_RANK
+
 
 def backfill_images():
     names = {n for d in DECKS for n in d["cards"]}
@@ -290,13 +305,15 @@ def average_deck(query):
             "decks": present[name],
             "avg_copies": copies[name] / present[name],
             "image": get_card_image_name(name),
+            "type": card_info(name).get("type", ""),
+            "type_rank": type_rank(name),
             "land": is_land(name),
             "deck_indexes": sorted(deck_map.get(name, set())),
         }
         for name in present
     ]
 
-    cards.sort(key=lambda c: (-c["inclusion"], c["land"], c["name"]))
+    cards.sort(key=lambda c: (-c["inclusion"], c["type_rank"], c["name"]))
 
     return {
         "commander": keys[0] if keys else query,
