@@ -212,33 +212,7 @@
 
       return { cards, deckCount: totalMatches };
     }
-
-      const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
-
-      const cards = [...deckCounts.entries()].map(([name, decks]) => {
-        const meta = metaByName.get(name) || {};
-        return {
-          name,
-          decks,
-          inclusion: decks / totalMatches,
-          avg_copies: copyCounts.get(name) / decks,
-          image: meta.image || "",
-          type_rank: meta.type_rank ?? 5,
-          selected: state.selectedCards.includes(name),
-        };
-      });
-
-      cards.sort((a, b) => {
-        if (a.selected !== b.selected) return Number(b.selected) - Number(a.selected);
-        const byInclusion = b.inclusion - a.inclusion;
-        if (byInclusion !== 0) return byInclusion;
-        if (a.type_rank !== b.type_rank) return a.type_rank - b.type_rank;
-        return a.name.localeCompare(b.name);
-      });
-
-      return { cards, deckCount: totalMatches };
-    }
-
+    
     function getCurrentDeckSet() {
       if (!state.data || !state.data.decks) return new Set();
 
