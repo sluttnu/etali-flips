@@ -13,7 +13,7 @@ ETALI = "Etali, Primal Conqueror"
 # Hostnames (first label) that get the standalone average-deck site.
 STANDALONE_HOSTS = {
     h.strip().lower()
-    for h in os.getenv("STANDALONE_HOSTS", "average-deck,average-decks").split(",")
+    for h in os.getenv("STANDALONE_HOSTS", "average-deck").split(",")
     if h.strip()
 }
 
