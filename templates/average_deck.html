@@ -94,6 +94,11 @@
       background: #1d1e20 url("/cardback.jpg") center / cover no-repeat;
     }
 
+    .card.selected { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+    .card.excluded { outline: 2px solid #e57373; outline-offset: 2px; }
+    .card.excluded img.loaded { opacity: 0.35; }
+    .card.excluded .pct { color: #e57373; }
+
     .card img {
       display: block;
       width: 100%;
@@ -146,6 +151,7 @@
     const state = {
       data: null,
       selectedCards: [],
+      excludedCards: [],
     };
 
     function pctLabel(x) {
@@ -157,11 +163,7 @@
       const deckIndexes = [...getCurrentDeckSet()];
       const totalMatches = deckIndexes.length;
 
-      if (!totalMatches) {
-        return { cards: [], deckCount: 0 };
-      }
-
-      const deckCounts = new Map();   // card -> number of decks containing it
+      const deckCounts = new Map();   // card -> decks containing it
       const copyCounts = new Map();   // card -> total copies across those decks
 
       for (const deckIndex of deckIndexes) {
@@ -174,6 +176,42 @@
           copyCounts.set(name, (copyCounts.get(name) || 0) + n);
         }
       }
+
+      // Keep filtered cards visible even at 0 decks so they can be un-clicked.
+      const names = new Set([
+        ...deckCounts.keys(),
+        ...state.selectedCards,
+        ...state.excludedCards,
+      ]);
+
+      const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
+
+      const cards = [...names].map(name => {
+        const meta = metaByName.get(name) || {};
+        const decks = deckCounts.get(name) || 0;
+        return {
+          name,
+          decks,
+          inclusion: totalMatches ? decks / totalMatches : 0,
+          avg_copies: decks ? copyCounts.get(name) / decks : 0,
+          image: meta.image || "",
+          type_rank: meta.type_rank ?? 5,
+          selected: state.selectedCards.includes(name),
+          excluded: state.excludedCards.includes(name),
+        };
+      });
+
+      cards.sort((a, b) => {
+        if (a.selected !== b.selected) return Number(b.selected) - Number(a.selected);
+        if (a.excluded !== b.excluded) return Number(b.excluded) - Number(a.excluded);
+        const byInclusion = b.inclusion - a.inclusion;
+        if (byInclusion !== 0) return byInclusion;
+        if (a.type_rank !== b.type_rank) return a.type_rank - b.type_rank;
+        return a.name.localeCompare(b.name);
+      });
+
+      return { cards, deckCount: totalMatches };
+    }
 
       const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
 
@@ -204,11 +242,16 @@
     function getCurrentDeckSet() {
       if (!state.data || !state.data.decks) return new Set();
 
+      const deckMap = state.data.deck_map || {};
       let deckSet = new Set(state.data.decks.map((_, i) => i));
 
-      for (const cardName of state.selectedCards) {
-        const matches = new Set((state.data.deck_map && state.data.deck_map[cardName]) || []);
+      for (const name of state.selectedCards) {
+        const matches = new Set(deckMap[name] || []);
         deckSet = new Set([...deckSet].filter(i => matches.has(i)));
+      }
+      for (const name of state.excludedCards) {
+        const matches = new Set(deckMap[name] || []);
+        deckSet = new Set([...deckSet].filter(i => !matches.has(i)));
       }
 
       return deckSet;
@@ -227,19 +270,36 @@
 
       const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
 
+      const toggleInclude = name => {
+        if (state.selectedCards.includes(name)) {
+          state.selectedCards = state.selectedCards.filter(n => n !== name);
+        } else {
+          state.selectedCards = [...state.selectedCards, name];
+          state.excludedCards = state.excludedCards.filter(n => n !== name);
+        }
+        renderCurrentDeckView();
+      };
+
+      const toggleExclude = name => {
+        if (state.excludedCards.includes(name)) {
+          state.excludedCards = state.excludedCards.filter(n => n !== name);
+        } else {
+          state.excludedCards = [...state.excludedCards, name];
+          state.selectedCards = state.selectedCards.filter(n => n !== name);
+        }
+        renderCurrentDeckView();
+      };
+
       cards.forEach(c => {
         const meta = metaByName.get(c.name) || {};
         const card = document.createElement("div");
-        card.className = "card";
+        card.className = "card" + (c.selected ? " selected" : "") + (c.excluded ? " excluded" : "");
         card.dataset.cardName = c.name;
-        card.title = state.selectedCards.includes(c.name)
-          ? `Selected: click to remove "${c.name}" from the filter`
-          : `Click to filter to decks containing "${c.name}"`;
-
-        if (state.selectedCards.includes(c.name)) {
-          card.style.outline = "2px solid #8ab4f8";
-          card.style.outlineOffset = "2px";
-        }
+        card.title = c.selected
+          ? `Included: click to remove, right-click to exclude "${c.name}"`
+          : c.excluded
+            ? `Excluded: right-click to remove, click to include "${c.name}"`
+            : `Click: only decks with "${c.name}" · Right-click: only decks without it`;
 
         const img = document.createElement("img");
         img.loading = "lazy";
@@ -250,34 +310,35 @@
 
         const pct = document.createElement("div");
         pct.className = "pct";
-        pct.textContent = pctLabel(c.inclusion);
-        if (c.avg_copies >= 1.5) {
-          const small = document.createElement("small");
-          small.textContent = "×" + c.avg_copies.toFixed(1);
-          pct.appendChild(small);
+        if (c.excluded) {
+          pct.textContent = "Excluded";
+        } else {
+          pct.textContent = pctLabel(c.inclusion);
+          if (c.avg_copies >= 1.5) {
+            const small = document.createElement("small");
+            small.textContent = "×" + c.avg_copies.toFixed(1);
+            pct.appendChild(small);
+          }
         }
         card.appendChild(pct);
 
-        card.addEventListener("click", () => {
-          const cardName = card.dataset.cardName;
-
-          if (state.selectedCards.includes(cardName)) {
-            state.selectedCards = state.selectedCards.filter(n => n !== cardName);
-          } else {
-            state.selectedCards = [...state.selectedCards, cardName];
-          }
-
-          renderCurrentDeckView();
+        card.addEventListener("click", () => toggleInclude(c.name));
+        card.addEventListener("contextmenu", e => {
+          e.preventDefault();
+          toggleExclude(c.name);
         });
 
         grid.appendChild(card);
       });
 
-      if (state.selectedCards.length) {
-        document.getElementById("sub").textContent =
-          `${deckCount} decks match the selected cards: ${state.selectedCards.join(", ")}`;
+      const sub = document.getElementById("sub");
+      if (state.selectedCards.length || state.excludedCards.length) {
+        const parts = [];
+        if (state.selectedCards.length) parts.push(`with ${state.selectedCards.join(", ")}`);
+        if (state.excludedCards.length) parts.push(`without ${state.excludedCards.join(", ")}`);
+        sub.textContent = `${deckCount} decks ${parts.join(" and ")}`;
       } else {
-        document.getElementById("sub").textContent =
+        sub.textContent =
           `${state.data.deck_count} decks, ${state.data.cards.length} distinct cards, highest inclusion first`;
       }
     }
@@ -291,6 +352,7 @@
 
     function resetFilters() {
       state.selectedCards = [];
+      state.excludedCards = [];
       renderCurrentDeckView();
     }
 
@@ -334,6 +396,7 @@
 
       state.data = data;
       state.selectedCards = [];
+      state.excludedCards = [];
 
       document.getElementById("title").textContent = "Average deck: " + data.commander;
       document.title = "Average deck: " + data.commander;
