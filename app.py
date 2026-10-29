@@ -62,7 +62,10 @@ def deck_from_player(player):
     if not isinstance(deck_obj, dict):
         return None
 
-    commanders = sorted((deck_obj.get("Commanders") or {}).keys(), key=str.lower)
+    commanders = sorted(
+        commanders,
+        key=lambda c: (-c["decks"], c["name"].lower())
+    )
 
     cards = []
     for name, info in (deck_obj.get("Mainboard") or {}).items():
