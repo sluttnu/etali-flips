@@ -131,6 +131,7 @@
       <input id="q" list="cmds" placeholder="Search commanders" autocomplete="off" />
       <datalist id="cmds"></datalist>
       <button type="submit">Show</button>
+      <button type="button" id="reset-filters" style="margin-left: 4px;">Reset filters</button>
     </form>
   </header>
 
@@ -142,7 +143,6 @@
     const commander = (new URLSearchParams(location.search).get("commander")
                         || DEFAULT_COMMANDER).trim();
 
-    // state for click-to-filter behavior
     const state = {
       data: null,
       selectedCards: [],
@@ -153,22 +153,86 @@
       return p > 0 && p < 1 ? "<1%" : Math.round(p) + "%";
     }
 
+    function buildFilteredCards() {
+      const deckSet = getCurrentDeckSet();
+      const deckIndexes = [...deckSet];
+      const totalMatches = deckIndexes.length;
+
+      if (!totalMatches) {
+        return { cards: [], deckCount: 0 };
+      }
+
+      const counts = new Map();
+
+      for (const deckIndex of deckIndexes) {
+        const deck = state.data.decks[deckIndex];
+        for (const cardName of deck.cards) {
+          counts.set(cardName, (counts.get(cardName) || 0) + 1);
+        }
+      }
+
+      const cards = [...counts.entries()].map(([name, deckCount]) => ({
+        name,
+        inclusion: deckCount / totalMatches,
+        decks: deckCount,
+      }));
+
+      const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
+      cards.forEach(c => {
+        const meta = metaByName.get(c.name) || {};
+        c.image = meta.image || "";
+        c.avg_copies = meta.avg_copies || 0;
+        c.land = !!meta.land;
+        c.selected = state.selectedCards.includes(c.name);
+      });
+
+      cards.sort((a, b) => {
+        if (a.selected !== b.selected) return Number(b.selected) - Number(a.selected);
+        const byInclusion = b.inclusion - a.inclusion;
+        if (byInclusion !== 0) return byInclusion;
+        if (!!a.land !== !!b.land) return Number(a.land) - Number(b.land);
+        return a.name.localeCompare(b.name);
+      });
+
+      return { cards, deckCount: totalMatches };
+    }
+
+    function getCurrentDeckSet() {
+      if (!state.data || !state.data.decks) return new Set();
+
+      let deckSet = new Set(state.data.decks.map((_, i) => i));
+
+      for (const cardName of state.selectedCards) {
+        const matches = new Set((state.data.deck_map && state.data.deck_map[cardName]) || []);
+        deckSet = new Set([...deckSet].filter(i => matches.has(i)));
+      }
+
+      return deckSet;
+    }
+
     function renderCardGrid(cards, deckCount) {
       grid.innerHTML = "";
 
+      if (!cards.length) {
+        const empty = document.createElement("div");
+        empty.className = "error";
+        empty.textContent = "No cards match the current deck filter.";
+        grid.appendChild(empty);
+        return;
+      }
+
       const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
-      const selectedSet = new Set(state.selectedCards);
 
       cards.forEach(c => {
         const meta = metaByName.get(c.name) || {};
         const card = document.createElement("div");
         card.className = "card";
         card.dataset.cardName = c.name;
-        card.title = selectedSet.has(c.name)
+        card.title = state.selectedCards.includes(c.name)
           ? `Selected: click to remove "${c.name}" from the filter`
           : `Click to filter to decks containing "${c.name}"`;
 
-        if (selectedSet.has(c.name)) {
+        if (state.selectedCards.includes(c.name)) {
           card.style.outline = "2px solid #8ab4f8";
           card.style.outlineOffset = "2px";
         }
@@ -205,13 +269,6 @@
         grid.appendChild(card);
       });
 
-      if (!cards.length) {
-        const empty = document.createElement("div");
-        empty.className = "error";
-        empty.textContent = "No cards match the current deck filter.";
-        grid.appendChild(empty);
-      }
-
       if (state.selectedCards.length) {
         document.getElementById("sub").textContent =
           `${deckCount} decks match the selected cards: ${state.selectedCards.join(", ")}`;
@@ -221,70 +278,16 @@
       }
     }
 
-    function getCurrentDeckSet() {
-      if (!state.data || !state.data.decks) return new Set();
-
-      let deckSet = new Set(state.data.decks.map((_, i) => i));
-
-      if (state.selectedCards.length === 0) {
-        return deckSet;
-      }
-
-      for (const cardName of state.selectedCards) {
-        const matches = new Set((state.data.deck_map && state.data.deck_map[cardName]) || []);
-        deckSet = new Set([...deckSet].filter(i => matches.has(i)));
-      }
-
-      return deckSet;
-    }
-
-    function buildFilteredCards() {
-      const deckSet = getCurrentDeckSet();
-      const deckIndexes = [...deckSet];
-      const totalMatches = deckIndexes.length;
-
-      if (!totalMatches) {
-        return [];
-      }
-
-      const counts = new Map();
-
-      for (const deckIndex of deckIndexes) {
-        const deck = state.data.decks[deckIndex];
-        for (const cardName of deck.cards) {
-          counts.set(cardName, (counts.get(cardName) || 0) + 1);
-        }
-      }
-
-      const cards = [...counts.entries()].map(([name, deckCount]) => ({
-        name,
-        inclusion: deckCount / totalMatches,
-        decks: deckCount,
-      }));
-
-      const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
-      cards.forEach(c => {
-        const meta = metaByName.get(c.name) || {};
-        c.image = meta.image || "";
-        c.avg_copies = meta.avg_copies || 0;
-        c.land = !!meta.land;
-      });
-
-      cards.sort((a, b) => {
-        const byInclusion = b.inclusion - a.inclusion;
-        if (byInclusion !== 0) return byInclusion;
-        if (!!a.land !== !!b.land) return Number(a.land) - Number(b.land);
-        return a.name.localeCompare(b.name);
-      });
-
-      return { cards, deckCount: totalMatches };
-    }
-
     function renderCurrentDeckView() {
       if (!state.data) return;
 
       const { cards, deckCount } = buildFilteredCards();
       renderCardGrid(cards, deckCount);
+    }
+
+    function resetFilters() {
+      state.selectedCards = [];
+      renderCurrentDeckView();
     }
 
     async function load() {
@@ -341,6 +344,10 @@
       const q = document.getElementById("q").value.trim();
       location.search = q ? "?commander=" + encodeURIComponent(q) : "";
     };
+
+    document.getElementById("reset-filters").addEventListener("click", () => {
+      resetFilters();
+    });
 
     async function loadCommanders() {
       const list = await (await fetch("/api/commanders")).json();
