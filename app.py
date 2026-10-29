@@ -133,34 +133,53 @@ _last_call = 0.0
 def image_key(name):
     return name.strip().lower()
 
+def front_face(name):
+    """'Turntimber Symbiosis // Turntimber, Serpentine Wood' -> 'Turntimber Symbiosis'."""
+    return name.split("//")[0].strip()
 
-def _scry_post(identifiers):
-    """One rate-limited call to /cards/collection (max 75 identifiers)."""
+
+def _scry_request(method, url, **kwargs):
+    """Rate-limited Scryfall request with 429 retry. Returns the Response."""
     global _last_call
     for _ in range(4):
         wait = 0.12 - (time.time() - _last_call)
         if wait > 0:
             time.sleep(wait)
-        r = requests.post(
-            "https://api.scryfall.com/cards/collection",
-            json={"identifiers": identifiers},
-            headers=SCRY_HEADERS,
-            timeout=20,
-        )
+        r = requests.request(method, url, headers=SCRY_HEADERS, timeout=20, **kwargs)
         _last_call = time.time()
         if r.status_code == 429:
             time.sleep(float(r.headers.get("Retry-After", 2)))
             continue
-        r.raise_for_status()
-        return r.json()
+        return r
     raise RuntimeError("Scryfall kept rate limiting us")
 
 
-def _card_image(card):
-    uris = card.get("image_uris") or (
-        (card.get("card_faces") or [{}])[0].get("image_uris")
-    ) or {}
-    return uris.get("normal")
+def _scry_post(identifiers):
+    """One call to /cards/collection (max 75 identifiers)."""
+    r = _scry_request("POST", "https://api.scryfall.com/cards/collection",
+                      json={"identifiers": identifiers})
+    r.raise_for_status()
+    return r.json()
+
+
+def _scry_named(name):
+    """Single exact-name lookup using the front face. Returns a card dict or None."""
+    r = _scry_request("GET", "https://api.scryfall.com/cards/named",
+                      params={"exact": front_face(name)})
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    return r.json()
+
+
+def _card_to_info(card):
+    url = _card_image(card)
+    if not url:
+        return None
+    return {
+        "image": url,
+        "type": card.get("type_line", "").split(" // ")[0],
+    }
 
 
 def ensure_images(names):
@@ -174,33 +193,49 @@ def ensure_images(names):
                      if image_key(n) not in CARD_INFO and n not in MISSING]
             if not batch:
                 continue
+
+            # Look cards up by front-face name only (dedupe, keep order).
+            fronts = list(dict.fromkeys(front_face(n) for n in batch))
             try:
-                data = _scry_post([{"name": n} for n in batch])
+                data = _scry_post([{"name": f} for f in fronts])
             except Exception as e:
                 print("scryfall batch failed:", e)
                 continue   # not marked missing, so it gets retried later
 
             found = {}
             for card in data.get("data", []):
-                url = _card_image(card)
-                if url:
-                    info = {
-                        "image": url,
-                        "type": card.get("type_line", "").split(" // ")[0],
-                    }
+                info = _card_to_info(card)
+                if info:
                     full = card["name"].lower()
                     found[full] = info
                     found[full.split(" // ")[0]] = info   # front-face lookups
 
             for n in batch:
                 k = image_key(n)
-                info = found.get(k) or found.get(k.split(" // ")[0])
+                info = found.get(k) or found.get(front_face(k))
+
+                if not info:
+                    # Fallback: single exact= lookup on the front face.
+                    try:
+                        card = _scry_named(n)
+                        info = _card_to_info(card) if card else None
+                    except Exception as e:
+                        print(f"scryfall named lookup failed for {n!r}:", e)
+                        continue   # transient error: don't mark missing
+
                 if info:
                     CARD_INFO[k] = info
                 else:
+                    print(f"scryfall: no match for {n!r}")
                     MISSING.add(n)
 
             INFO_FILE.write_text(json.dumps(CARD_INFO))
+
+def _card_image(card):
+    uris = card.get("image_uris") or (
+        (card.get("card_faces") or [{}])[0].get("image_uris")
+    ) or {}
+    return uris.get("normal")
 
 
 def card_info(name):
