@@ -29,9 +29,47 @@
     h1 { margin: 0; font-size: 1.4rem; font-weight: 600; }
     header { flex-wrap: wrap; gap: 12px; }
 
+    .titlerow { display: flex; align-items: center; }
+
+    .info {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      margin-left: 8px;
+      border: 1px solid #7a7d82;
+      border-radius: 50%;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #b8b8b8;
+      cursor: help;
+    }
+    .info:hover, .info:focus { color: #fff; border-color: #fff; outline: none; }
+
+    .tip {
+      display: none;
+      position: absolute;
+      left: 0;
+      top: 26px;
+      width: 290px;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      font-weight: 400;
+      line-height: 1.4;
+      text-align: left;
+      color: #e6e6e6;
+      background: #1d1e20;
+      border: 1px solid #5a5d62;
+      border-radius: 3px;
+      z-index: 10;
+    }
+    .info:hover .tip, .info:focus .tip { display: block; }
+
     .setup { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
-    select {
+    select, input {
       font: inherit;
       font-size: 0.85rem;
       width: 220px;
@@ -156,11 +194,12 @@
 </head>
 <body>
   <header>
-    <h1>Etali Flips</h1>
+    <div class="titlerow"><h1>Etali Flips</h1><span class="info" tabindex="0" aria-describedby="info-tip" aria-label="About this data">?<span class="tip" id="info-tip" role="tooltip">Loading&hellip;</span></span></div>
     <div class="setup">
-      <select class="pick" aria-label="Deck 1 commander"></select>
-      <select class="pick" aria-label="Deck 2 commander"></select>
-      <select class="pick" aria-label="Deck 3 commander"></select>
+      <input class="pick" list="cmds" placeholder="Random deck" autocomplete="off" aria-label="Deck 1 commander" />
+      <input class="pick" list="cmds" placeholder="Random deck" autocomplete="off" aria-label="Deck 2 commander" />
+      <input class="pick" list="cmds" placeholder="Random deck" autocomplete="off" aria-label="Deck 3 commander" />
+      <datalist id="cmds"></datalist>
       <button id="new-game" type="button">New game</button>
     </div>
   </header>
@@ -207,10 +246,22 @@
     async function loadCommanders() {
       const res = await fetch("/api/commanders");
       const list = await res.json();
-      document.querySelectorAll(".pick").forEach(sel => {
-        sel.append(new Option("Random deck", ""));
-        list.forEach(c => sel.append(new Option(`${c.name} (${c.decks})`, c.name)));
+      const dl = document.getElementById("cmds");
+      list.forEach(c => {
+        const o = document.createElement("option");
+        o.value = c.name;
+        o.label = `${c.decks} decks`;
+        dl.appendChild(o);
       });
+    }
+
+    async function loadInfo() {
+      const d = await (await fetch("/api/dataset-info")).json();
+      document.getElementById("info-tip").textContent =
+        `Built from topdeck.gg tournament data: decks from players who scored at least ` +
+        `half of the available points, in tournaments from the last ${d.days} days with ` +
+        `at least ${d.min_players} players and at least ${d.min_swiss} Swiss rounds. ` +
+        `${d.decks} decks from ${d.tournaments} tournaments.`;
     }
 
     function buildDeck(deck, idx) {
@@ -325,6 +376,9 @@
     }
 
     document.getElementById("new-game").onclick = newGame;
+    document.querySelectorAll(".pick").forEach(i =>
+      i.addEventListener("keydown", e => { if (e.key === "Enter") newGame(); }));
+    loadInfo().catch(() => {});
     loadCommanders().catch(() => {}).then(newGame);
   </script>
 </body>

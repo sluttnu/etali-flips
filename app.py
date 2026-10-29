@@ -15,11 +15,17 @@ ETALI = "Etali, Primal Conqueror"
 # Dataset (tournament standings pulled by data_generation.py)
 # --------------------------------------------------------------------------
 
+def dataset_settings():
+    return {
+        "days": int(os.getenv("DAYS", 180)),
+        "min_players": int(os.getenv("MIN_PLAYERS", 32)),
+        "min_swiss": int(os.getenv("MIN_SWISS", 4)),
+    }
+
+
 def dataset_path():
-    days = int(os.getenv("DAYS", 180))
-    min_players = int(os.getenv("MIN_PLAYERS", 32))
-    min_swiss = int(os.getenv("MIN_SWISS", 4))
-    return DATA_DIR / f"standings_{days}d_p{min_players}_swiss{min_swiss}.json"
+    s = dataset_settings()
+    return DATA_DIR / f"standings_{s['days']}d_p{s['min_players']}_swiss{s['min_swiss']}.json"
 
 
 def load_dataset():
@@ -204,10 +210,11 @@ def pick_decks(choices):
     """choices: up to 3 commander names, "" meaning a fully random deck."""
     chosen, used = [], set()
     for i in range(3):
-        wanted = choices[i] if i < len(choices) else ""
+        wanted = (choices[i] if i < len(choices) else "").strip().lower()
         candidates = [
             k for k, d in enumerate(DECKS)
-            if k not in used and (not wanted or wanted in d["commanders"])
+            if k not in used
+            and (not wanted or any(wanted in c.lower() for c in d["commanders"]))
         ]
         if not candidates:
             raise ValueError(f"No deck available for {wanted or 'a random slot'}")
@@ -315,6 +322,11 @@ def api_average_deck():
     if not data["deck_count"]:
         return jsonify({"error": f"No decks found for {query}"}), 404
     return jsonify(data)
+
+
+@app.route("/api/dataset-info")
+def api_dataset_info():
+    return jsonify({**dataset_settings(), "tournaments": len(DATA), "decks": len(DECKS)})
 
 
 @app.route("/api/commanders")

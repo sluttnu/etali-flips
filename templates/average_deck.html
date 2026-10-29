@@ -24,6 +24,44 @@
     h1 { margin: 8px 0 4px; font-size: 1.4rem; font-weight: 600; }
     .sub { margin: 0; font-size: 0.85rem; color: #9a9a9a; }
 
+    .titlerow { display: flex; align-items: center; }
+
+    .info {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      margin-left: 8px;
+      border: 1px solid #7a7d82;
+      border-radius: 50%;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #b8b8b8;
+      cursor: help;
+    }
+    .info:hover, .info:focus { color: #fff; border-color: #fff; outline: none; }
+
+    .tip {
+      display: none;
+      position: absolute;
+      left: 0;
+      top: 26px;
+      width: 290px;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      font-weight: 400;
+      line-height: 1.4;
+      text-align: left;
+      color: #e6e6e6;
+      background: #1d1e20;
+      border: 1px solid #5a5d62;
+      border-radius: 3px;
+      z-index: 10;
+    }
+    .info:hover .tip, .info:focus .tip { display: block; }
+
     .search { display: flex; gap: 8px; margin-top: 14px; }
 
     input, button {
@@ -85,7 +123,7 @@
 <body>
   <header>
     <a class="back" href="/">&larr; Etali Flips</a>
-    <h1 id="title">Average deck</h1>
+    <div class="titlerow"><h1 id="title">Average deck</h1><span class="info" tabindex="0" aria-describedby="info-tip" aria-label="About this data">?<span class="tip" id="info-tip" role="tooltip">Loading&hellip;</span></span></div>
     <p class="sub" id="sub">Loading&hellip;</p>
     <form id="search" class="search">
       <input id="q" list="cmds" placeholder="Search commanders" autocomplete="off" />
@@ -167,6 +205,16 @@
       });
     }
 
+    async function loadInfo() {
+      const d = await (await fetch("/api/dataset-info")).json();
+      document.getElementById("info-tip").textContent =
+        `Built from topdeck.gg tournament data: decks from players who scored at least ` +
+        `half of the available points, in tournaments from the last ${d.days} days with ` +
+        `at least ${d.min_players} players and at least ${d.min_swiss} Swiss rounds. ` +
+        `${d.decks} decks from ${d.tournaments} tournaments.`;
+    }
+
+    loadInfo().catch(() => {});
     loadCommanders().catch(() => {});
     load();
   </script>
