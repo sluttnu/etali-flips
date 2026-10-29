@@ -90,6 +90,7 @@ def tournament_timestamp(t):
 def random_deck_records():
     decks = []
     for tournament in DATA:
+        ts = tournament_timestamp(tournament)
         for player in tournament.get("standings") or []:
             parsed = deck_from_player(player)
             if not parsed:
