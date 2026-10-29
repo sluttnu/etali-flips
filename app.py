@@ -1,8 +1,8 @@
 import json, os, random, threading, pathlib, time
-from collections import Counter
-
 import requests
+from collections import Counter
 from flask import Flask, jsonify, render_template, request, session, send_from_directory
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
@@ -70,25 +70,40 @@ def deck_from_player(player):
 
     return commanders, cards
 
+def tournament_timestamp(t):
+    """Unix seconds for a tournament, or None if no usable date field is found."""
+    for key in ("startDate", "date", "start_date", "startTime"):
+        v = t.get(key)
+        if v is None:
+            continue
+        try:
+            x = float(v)                      # number or numeric string
+            return x / 1000 if x > 1e11 else x   # ms -> s
+        except (TypeError, ValueError):
+            pass
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            continue
+    return None
+
 
 def random_deck_records():
     decks = []
     for tournament in DATA:
+        ts = tournament_timestamp(tournament)
         for player in tournament.get("standings") or []:
-            parsed = deck_from_player(player)
-            if not parsed:
-                continue
-            commanders, cards = parsed
-            if not cards:
-                continue
+            ...
             decks.append({
                 "tournament": tournament.get("tournamentName", "Unknown"),
+                "date": ts,
                 "commanders": commanders,
                 "commander_key": commander_key(commanders),
                 "cards": cards,
             })
 
-    print(f"random_deck_records -> {len(decks)} valid deck entries loaded")
+    undated = sum(1 for d in decks if d["date"] is None)
+    print(f"random_deck_records -> {len(decks)} valid deck entries loaded ({undated} without a date)")
     return decks
 
 
@@ -324,9 +339,11 @@ def average_deck(query):
             name: sorted(deck_indexes)
             for name, deck_indexes in sorted(deck_map.items(), key=lambda kv: kv[0].lower())
         },
+        "days": dataset_settings()["days"],
         "decks": [
             {
                 "tournament": d["tournament"],
+                "date": d["date"],
                 "commanders": d["commanders"],
                 "cards": d["cards"],
             }

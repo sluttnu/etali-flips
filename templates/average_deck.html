@@ -64,6 +64,10 @@
 
     .search { display: flex; gap: 8px; margin-top: 14px; }
 
+    .daterow { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 0.85rem; color: #9a9a9a; }
+    .daterow input[type=range] { width: 260px; padding: 0; }
+    .daterow output { color: #e6e6e6; min-width: 9ch; }
+
     input, button {
       font: inherit;
       font-size: 0.85rem;
@@ -138,6 +142,11 @@
       <button type="submit">Show</button>
       <button type="button" id="reset-filters" style="margin-left: 4px;">Reset filters</button>
     </form>
+    <div class="daterow">
+      <label for="age">Decks from</label>
+      <input type="range" id="age" min="1" max="365" value="365" disabled>
+      <output id="age-label">all time</output>
+    </div>
   </header>
 
   <main id="grid" class="grid"></main>
@@ -152,12 +161,32 @@
       data: null,
       selectedCards: [],
       excludedCards: [],
+      maxAgeDays: null,   // null = no date filter
     };
 
     function pctLabel(x) {
       const p = x * 100;
       return p > 0 && p < 1 ? "<1%" : Math.round(p) + "%";
     }
+
+    const DAY = 86400;
+
+    function cutoffTs() {
+      return state.maxAgeDays == null ? null : Date.now() / 1000 - state.maxAgeDays * DAY;
+    }
+
+    function updateAgeLabel() {
+      document.getElementById("age-label").textContent =
+        state.maxAgeDays == null ? "all time" : `last ${state.maxAgeDays} days`;
+    }
+
+    const ageInput = document.getElementById("age");
+    ageInput.addEventListener("input", () => {
+      const v = Number(ageInput.value);
+      state.maxAgeDays = v >= Number(ageInput.max) ? null : v;
+      updateAgeLabel();
+      renderCurrentDeckView();
+    });
 
     function buildFilteredCards() {
       const deckIndexes = [...getCurrentDeckSet()];
@@ -212,12 +241,18 @@
 
       return { cards, deckCount: totalMatches };
     }
-    
+
     function getCurrentDeckSet() {
       if (!state.data || !state.data.decks) return new Set();
 
       const deckMap = state.data.deck_map || {};
-      let deckSet = new Set(state.data.decks.map((_, i) => i));
+      const cutoff = cutoffTs();
+
+      let deckSet = new Set();
+      state.data.decks.forEach((d, i) => {
+        // Decks with no date are hidden while a date filter is active.
+        if (cutoff == null || (d.date != null && d.date >= cutoff)) deckSet.add(i);
+      });
 
       for (const name of state.selectedCards) {
         const matches = new Set(deckMap[name] || []);
@@ -306,14 +341,14 @@
       });
 
       const sub = document.getElementById("sub");
+      const when = state.maxAgeDays == null ? "" : ` from the last ${state.maxAgeDays} days`;
       if (state.selectedCards.length || state.excludedCards.length) {
         const parts = [];
         if (state.selectedCards.length) parts.push(`with ${state.selectedCards.join(", ")}`);
         if (state.excludedCards.length) parts.push(`without ${state.excludedCards.join(", ")}`);
-        sub.textContent = `${deckCount} decks ${parts.join(" and ")}`;
+        sub.textContent = `${deckCount} decks${when} ${parts.join(" and ")}`;
       } else {
-        sub.textContent =
-          `${state.data.deck_count} decks, ${state.data.cards.length} distinct cards, highest inclusion first`;
+        sub.textContent = `${deckCount} decks${when}, ${state.data.cards.length} distinct cards, highest inclusion first`;
       }
     }
 
@@ -327,6 +362,9 @@
     function resetFilters() {
       state.selectedCards = [];
       state.excludedCards = [];
+      state.maxAgeDays = null;
+      ageInput.value = ageInput.max;
+      updateAgeLabel();
       renderCurrentDeckView();
     }
 
@@ -371,6 +409,11 @@
       state.data = data;
       state.selectedCards = [];
       state.excludedCards = [];
+      state.maxAgeDays = null;
+      ageInput.max = data.days || 365;
+      ageInput.value = ageInput.max;
+      ageInput.disabled = false;
+      updateAgeLabel();
 
       document.getElementById("title").textContent = "Average deck: " + data.commander;
       document.title = "Average deck: " + data.commander;
