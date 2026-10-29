@@ -109,7 +109,7 @@
         img.loading = "lazy";
         img.alt = c.name;
         img.onload = () => img.classList.add("loaded");
-        img.src = c.image;
+        if (c.image) img.src = c.image;
         card.appendChild(img);
 
         const pct = document.createElement("div");

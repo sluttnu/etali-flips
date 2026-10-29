@@ -9,7 +9,88 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
 
 DATA_DIR = pathlib.Path("data")
-CARD_CACHE = {}
+
+IMAGE_FILE = DATA_DIR / "card_images.json"
+IMAGE_CACHE = json.loads(IMAGE_FILE.read_text()) if IMAGE_FILE.exists() else {}
+MISSING = set()          # names Scryfall couldn't match (not persisted)
+SCRY_LOCK = threading.Lock()
+SCRY_HEADERS = {
+    "User-Agent": "etali-flips/1.0 (personal playtesting tool)",
+    "Accept": "application/json",
+}
+_last_call = 0.0
+
+def image_key(name):
+    return name.strip().lower()
+
+def _scry_post(identifiers):
+    """One rate-limited call to /cards/collection (max 75 identifiers)."""
+    global _last_call
+    for _ in range(4):
+        wait = 0.12 - (time.time() - _last_call)
+        if wait > 0:
+            time.sleep(wait)
+        r = requests.post(
+            "https://api.scryfall.com/cards/collection",
+            json={"identifiers": identifiers},
+            headers=SCRY_HEADERS,
+            timeout=20,
+        )
+        _last_call = time.time()
+        if r.status_code == 429:
+            time.sleep(float(r.headers.get("Retry-After", 2)))
+            continue
+        r.raise_for_status()
+        return r.json()
+    raise RuntimeError("Scryfall kept rate limiting us")
+
+def _card_image(card):
+    uris = card.get("image_uris") or (
+        (card.get("card_faces") or [{}])[0].get("image_uris")
+    ) or {}
+    return uris.get("normal")
+
+def ensure_images(names):
+    """Resolve image URLs for any uncached names, in batches of 75."""
+    todo = sorted({n for n in names
+                   if image_key(n) not in IMAGE_CACHE and n not in MISSING})
+    for i in range(0, len(todo), 75):
+        with SCRY_LOCK:
+            # Re-check inside the lock: another thread may have filled these in.
+            batch = [n for n in todo[i:i + 75]
+                     if image_key(n) not in IMAGE_CACHE and n not in MISSING]
+            if not batch:
+                continue
+            try:
+                data = _scry_post([{"name": n} for n in batch])
+            except Exception as e:
+                print("scryfall batch failed:", e)
+                continue   # not marked missing, so it gets retried later
+
+            found = {}
+            for card in data.get("data", []):
+                url = _card_image(card)
+                if url:
+                    full = card["name"].lower()
+                    found[full] = url
+                    found[full.split(" // ")[0]] = url   # front-face lookups
+
+            for n in batch:
+                k = image_key(n)
+                url = found.get(k) or found.get(k.split(" // ")[0])
+                if url:
+                    IMAGE_CACHE[k] = url
+                else:
+                    MISSING.add(n)
+
+            IMAGE_FILE.write_text(json.dumps(IMAGE_CACHE))
+
+def get_card_image_name(name):
+    url = IMAGE_CACHE.get(image_key(name))
+    if not url:
+        ensure_images([name])
+        url = IMAGE_CACHE.get(image_key(name))
+    return url or ""
 
 def dataset_path():
     days = int(os.getenv("DAYS", 180))
@@ -41,26 +122,6 @@ def deck_from_player(player):
 
     return commanders, cards
 
-def normalize_card_name(name):
-    return quote_plus(name.strip())
-
-def card_cache_key(name):
-    return normalize_card_name(name).lower()
-
-def get_card_image_name(name):
-    key = card_cache_key(name)
-    if key in CARD_CACHE:
-        return CARD_CACHE[key]
-
-    exact = quote(name)
-    image_url = f"https://api.scryfall.com/cards/named?exact={exact}&format=image"
-
-    if not image_url:
-        raise ValueError(f"Could not find art for {name}")
-
-    CARD_CACHE[key] = image_url
-    return image_url
-
 def random_deck_records():
     decks = []
     for tournament in DATA:
@@ -81,6 +142,14 @@ def random_deck_records():
     return decks
 
 DECKS = random_deck_records()
+
+def backfill_images():
+    names = {n for d in DECKS for n in d["cards"]}
+    print(f"backfilling images for {len(names)} cards")
+    ensure_images(names)
+    print("image backfill done")
+
+threading.Thread(target=backfill_images, daemon=True).start()
 
 def commander_counts():
     counts = {}
@@ -119,6 +188,7 @@ def average_deck(prefix=ETALI):
         for name, k in Counter(d["cards"]).items():
             present[name] += 1
             copies[name] += k
+            "image": get_card_image_name(name),
 
     cards = [
         {
@@ -126,7 +196,7 @@ def average_deck(prefix=ETALI):
             "inclusion": present[name] / n,
             "decks": present[name],
             "avg_copies": copies[name] / present[name],
-            "image": get_card_image_name(name) + "&version=normal",
+            "image": get_card_image_name(name),
         }
         for name in present
     ]
@@ -153,13 +223,7 @@ def new_game_state(choices=()):
             "revealed": [],
         })
 
-    # prefetch art for initial stash, background style
-    for deck in game:
-        for card_name in deck["stash"]:
-            try:
-                get_card_image_name(card_name)
-            except Exception:
-                pass
+    ensure_images([c for deck in game for c in deck["stash"]])
 
     return game
 
