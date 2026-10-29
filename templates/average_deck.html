@@ -113,6 +113,8 @@
     }
     .card img.loaded { opacity: 1; }
 
+    .strip { display: block; height: 6px; margin-top: 5px; border-radius: 2px; background: #3f4247; }
+
     .pct {
       position: absolute;
       left: 0;
@@ -169,6 +171,49 @@
       return p > 0 && p < 1 ? "<1%" : Math.round(p) + "%";
     }
 
+    const SCALE = [
+      [0,   [30, 58, 95]],     // dim blue
+      [0.5, [160, 96, 122]],   // purple midpoint
+      [1,   [255, 166, 61]],   // bright orange
+    ];
+    const NO_DATA = "#3f4247";
+
+    function scaleColor(t) {
+      t = Math.max(0, Math.min(1, t));
+      for (let i = 1; i < SCALE.length; i++) {
+        if (t <= SCALE[i][0]) {
+          const [t0, c0] = SCALE[i - 1];
+          const [t1, c1] = SCALE[i];
+          const f = (t - t0) / (t1 - t0);
+          return `rgb(${c0.map((v, k) => Math.round(v + (c1[k] - v) * f)).join(",")})`;
+        }
+      }
+    }
+
+    function stripGradient(bins, totals) {
+      const n = totals.length;
+      const stops = [];
+      for (let i = 0; i < n; i++) {
+        const color = totals[i] ? scaleColor((bins ? bins[i] : 0) / totals[i]) : NO_DATA;
+        stops.push(`${color} ${(i / n * 100).toFixed(3)}% ${((i + 1) / n * 100).toFixed(3)}%`);
+      }
+      return `linear-gradient(to right, ${stops.join(",")})`;
+    }
+
+    function binLabel(axis, i) {
+      const w = (axis.end - axis.start) / axis.n;
+      const f = ts => new Date(ts * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      return `${f(axis.start + i * w)} – ${f(axis.start + (i + 1) * w)}`;
+    }
+
+    function buildAxis() {
+      const end = Date.now() / 1000;
+      const days = state.maxAgeDays == null ? (state.data.days || 365) : state.maxAgeDays;
+      const start = end - days * DAY;
+      const n = Math.min(52, Math.max(12, Math.round(days / 7)));
+      return { start, end, n };
+    }
+
     const DAY = 86400;
 
     function cutoffTs() {
@@ -192,17 +237,35 @@
       const deckIndexes = [...getCurrentDeckSet()];
       const totalMatches = deckIndexes.length;
 
+      const axis = buildAxis();
+      axis.totals = new Array(axis.n).fill(0);   // decks per bin (all cards)
+
       const deckCounts = new Map();   // card -> decks containing it
       const copyCounts = new Map();   // card -> total copies across those decks
+      const binCounts = new Map();    // card -> Uint16Array of decks per bin
 
       for (const deckIndex of deckIndexes) {
+        const deck = state.data.decks[deckIndex];
+
+        let bin = -1;
+        if (deck.date != null) {
+          bin = Math.floor((deck.date - axis.start) / (axis.end - axis.start) * axis.n);
+          bin = Math.max(0, Math.min(axis.n - 1, bin));
+          axis.totals[bin]++;
+        }
+
         const perDeck = new Map();
-        for (const cardName of state.data.decks[deckIndex].cards) {
+        for (const cardName of deck.cards) {
           perDeck.set(cardName, (perDeck.get(cardName) || 0) + 1);
         }
         for (const [name, n] of perDeck) {
           deckCounts.set(name, (deckCounts.get(name) || 0) + 1);
           copyCounts.set(name, (copyCounts.get(name) || 0) + n);
+          if (bin >= 0) {
+            let arr = binCounts.get(name);
+            if (!arr) { arr = new Uint16Array(axis.n); binCounts.set(name, arr); }
+            arr[bin]++;
+          }
         }
       }
 
@@ -225,6 +288,7 @@
           avg_copies: decks ? copyCounts.get(name) / decks : 0,
           image: meta.image || "",
           type_rank: meta.type_rank ?? 5,
+          bins: binCounts.get(name) || null,
           selected: state.selectedCards.includes(name),
           excluded: state.excludedCards.includes(name),
         };
@@ -239,7 +303,7 @@
         return a.name.localeCompare(b.name);
       });
 
-      return { cards, deckCount: totalMatches };
+      return { cards, deckCount: totalMatches, axis };
     }
 
     function getCurrentDeckSet() {
@@ -266,7 +330,7 @@
       return deckSet;
     }
 
-    function renderCardGrid(cards, deckCount) {
+    function renderCardGrid(cards, deckCount, axis) {
       grid.innerHTML = "";
 
       if (!cards.length) {
@@ -330,6 +394,22 @@
           }
         }
         card.appendChild(pct);
+        if (!c.excluded && c.decks) {
+          const strip = document.createElement("span");
+          strip.className = "strip";
+          strip.style.background = stripGradient(c.bins, axis.totals);
+          strip.addEventListener("mousemove", e => {
+            const r = strip.getBoundingClientRect();
+            const i = Math.max(0, Math.min(axis.n - 1,
+              Math.floor((e.clientX - r.left) / r.width * axis.n)));
+            const total = axis.totals[i];
+            const got = c.bins ? c.bins[i] : 0;
+            strip.title = total
+              ? `${binLabel(axis, i)}: ${got} of ${total} decks (${pctLabel(got / total)})`
+              : `${binLabel(axis, i)}: no decks`;
+          });
+          pct.appendChild(strip);
+        }
 
         card.addEventListener("click", () => toggleInclude(c.name));
         card.addEventListener("contextmenu", e => {
@@ -355,8 +435,8 @@
     function renderCurrentDeckView() {
       if (!state.data) return;
 
-      const { cards, deckCount } = buildFilteredCards();
-      renderCardGrid(cards, deckCount);
+      const { cards, deckCount, axis } = buildFilteredCards();
+      renderCardGrid(cards, deckCount, axis);
     }
 
     function resetFilters() {
