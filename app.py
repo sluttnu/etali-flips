@@ -10,8 +10,8 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
 
 DATA_DIR = pathlib.Path("data")
 
-IMAGE_FILE = DATA_DIR / "card_images.json"
-IMAGE_CACHE = json.loads(IMAGE_FILE.read_text()) if IMAGE_FILE.exists() else {}
+INFO_FILE = DATA_DIR / "card_info.json"
+CARD_INFO = json.loads(INFO_FILE.read_text()) if INFO_FILE.exists() else {}
 MISSING = set()          # names Scryfall couldn't match (not persisted)
 SCRY_LOCK = threading.Lock()
 SCRY_HEADERS = {
@@ -51,14 +51,13 @@ def _card_image(card):
     return uris.get("normal")
 
 def ensure_images(names):
-    """Resolve image URLs for any uncached names, in batches of 75."""
+    """Resolve image URL + front-face type for uncached names, 75 at a time."""
     todo = sorted({n for n in names
-                   if image_key(n) not in IMAGE_CACHE and n not in MISSING})
+                   if image_key(n) not in CARD_INFO and n not in MISSING})
     for i in range(0, len(todo), 75):
         with SCRY_LOCK:
-            # Re-check inside the lock: another thread may have filled these in.
             batch = [n for n in todo[i:i + 75]
-                     if image_key(n) not in IMAGE_CACHE and n not in MISSING]
+                     if image_key(n) not in CARD_INFO and n not in MISSING]
             if not batch:
                 continue
             try:
@@ -71,40 +70,36 @@ def ensure_images(names):
             for card in data.get("data", []):
                 url = _card_image(card)
                 if url:
+                    info = {
+                        "image": url,
+                        "type": card.get("type_line", "").split(" // ")[0],
+                    }
                     full = card["name"].lower()
-                    found[full] = url
-                    found[full.split(" // ")[0]] = url   # front-face lookups
+                    found[full] = info
+                    found[full.split(" // ")[0]] = info
 
             for n in batch:
                 k = image_key(n)
-                url = found.get(k) or found.get(k.split(" // ")[0])
-                if url:
-                    IMAGE_CACHE[k] = url
+                info = found.get(k) or found.get(k.split(" // ")[0])
+                if info:
+                    CARD_INFO[k] = info
                 else:
                     MISSING.add(n)
 
-            IMAGE_FILE.write_text(json.dumps(IMAGE_CACHE))
+            INFO_FILE.write_text(json.dumps(CARD_INFO))
+
+def card_info(name):
+    info = CARD_INFO.get(image_key(name))
+    if not info:
+        ensure_images([name])
+        info = CARD_INFO.get(image_key(name))
+    return info or {}
 
 def get_card_image_name(name):
-    url = IMAGE_CACHE.get(image_key(name))
-    if not url:
-        ensure_images([name])
-        url = IMAGE_CACHE.get(image_key(name))
-    return url or ""
+    return card_info(name).get("image", "")
 
-def dataset_path():
-    days = int(os.getenv("DAYS", 180))
-    min_players = int(os.getenv("MIN_PLAYERS", 32))
-    min_swiss = int(os.getenv("MIN_SWISS", 4))
-    return DATA_DIR / f"standings_{days}d_p{min_players}_swiss{min_swiss}.json"
-
-def load_dataset():
-    path = dataset_path()
-    if not path.exists():
-        raise FileNotFoundError(f"Dataset not found: {path}")
-
-    with path.open() as f:
-        return json.load(f)
+def is_land(name):
+    return "Land" in card_info(name).get("type", "")
 
 DATA = load_dataset()
 
@@ -179,8 +174,9 @@ def pick_decks(choices):
 
 ETALI = "Etali, Primal Conqueror"
 
-def average_deck(prefix=ETALI):
-    decks = [d for d in DECKS if any(c.startswith(prefix) for c in d["commanders"])]
+def average_deck(query=ETALI):
+    q = query.lower()
+    decks = [d for d in DECKS if any(q in c.lower() for c in d["commanders"])]
     n = len(decks)
 
     present, copies = Counter(), Counter()
@@ -188,7 +184,8 @@ def average_deck(prefix=ETALI):
         for name, k in Counter(d["cards"]).items():
             present[name] += 1
             copies[name] += k
-            "image": get_card_image_name(name),
+
+    ensure_images(list(present))
 
     cards = [
         {
@@ -197,11 +194,12 @@ def average_deck(prefix=ETALI):
             "decks": present[name],
             "avg_copies": copies[name] / present[name],
             "image": get_card_image_name(name),
+            "land": is_land(name),
         }
         for name in present
     ]
-    cards.sort(key=lambda c: (-c["inclusion"], c["name"]))
-    return {"commander": prefix, "deck_count": n, "cards": cards}
+    cards.sort(key=lambda c: (-c["inclusion"], c["land"], c["name"]))
+    return {"commander": query, "deck_count": n, "cards": cards}
 
 def new_game_state(choices=()):
     chosen = pick_decks(choices)

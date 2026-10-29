@@ -24,6 +24,22 @@
     h1 { margin: 8px 0 4px; font-size: 1.4rem; font-weight: 600; }
     .sub { margin: 0; font-size: 0.85rem; color: #9a9a9a; }
 
+    .search { display: flex; gap: 8px; margin-top: 14px; }
+
+    input, button {
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 4px 10px;
+      border: 1px solid #5a5d62;
+      border-radius: 3px;
+      background: #3a3d41;
+      color: #e6e6e6;
+    }
+    input { width: 320px; max-width: 100%; }
+    button { cursor: pointer; }
+    button:hover { background: #46494e; }
+    input:focus-visible, button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
@@ -71,6 +87,11 @@
     <a class="back" href="/">&larr; Etali Flips</a>
     <h1 id="title">Average deck</h1>
     <p class="sub" id="sub">Loading&hellip;</p>
+    <form id="search" class="search">
+      <input id="q" list="cmds" placeholder="Search commanders" autocomplete="off" />
+      <datalist id="cmds"></datalist>
+      <button type="submit">Show</button>
+    </form>
   </header>
 
   <main id="grid" class="grid"></main>
@@ -126,6 +147,27 @@
       });
     }
 
+    document.getElementById("q").value =
+      new URLSearchParams(location.search).get("commander") || "";
+
+    document.getElementById("search").onsubmit = e => {
+      e.preventDefault();
+      const q = document.getElementById("q").value.trim();
+      location.search = q ? "?commander=" + encodeURIComponent(q) : "";
+    };
+
+    async function loadCommanders() {
+      const list = await (await fetch("/api/commanders")).json();
+      const dl = document.getElementById("cmds");
+      list.forEach(c => {
+        const o = document.createElement("option");
+        o.value = c.name;
+        o.label = `${c.decks} decks`;
+        dl.appendChild(o);
+      });
+    }
+
+    loadCommanders().catch(() => {});
     load();
   </script>
 </body>
