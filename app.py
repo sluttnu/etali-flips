@@ -101,8 +101,6 @@ def get_card_image_name(name):
 def is_land(name):
     return "Land" in card_info(name).get("type", "")
 
-DATA = load_dataset()
-
 def deck_from_player(player):
     """Return (commanders, library_cards) from a standings entry, or None."""
     deck_obj = player.get("deckObj")
