@@ -120,8 +120,25 @@ KEY_COUNTS = Counter(d["commander_key"] for d in DECKS if d["commander_key"])
 # --------------------------------------------------------------------------
 
 INFO_FILE = DATA_DIR / "card_info.json"
-CARD_INFO = json.loads(INFO_FILE.read_text()) if INFO_FILE.exists() else {}
-MISSING = set()          # names Scryfall couldn't match (not persisted)
+MISSING_FILE = DATA_DIR / "card_missing.json"
+
+
+def _load_json(path, default):
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, ValueError):
+        return default
+
+
+def _save_json(path, obj):
+    """Atomic write: a crash mid-write can't leave a truncated file."""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(obj))
+    os.replace(tmp, path)
+
+
+CARD_INFO = _load_json(INFO_FILE, {})
+MISSING = set(_load_json(MISSING_FILE, []))   # persisted: delete the file to retry them
 SCRY_LOCK = threading.Lock()
 SCRY_HEADERS = {
     "User-Agent": "etali-flips/1.0 (personal playtesting tool)",
@@ -229,7 +246,8 @@ def ensure_images(names):
                     print(f"scryfall: no match for {n!r}")
                     MISSING.add(n)
 
-            INFO_FILE.write_text(json.dumps(CARD_INFO))
+            _save_json(INFO_FILE, CARD_INFO)
+            _save_json(MISSING_FILE, sorted(MISSING))
 
 def _card_image(card):
     uris = card.get("image_uris") or (
@@ -271,8 +289,10 @@ def type_rank(name):
 
 def backfill_images():
     names = {n for d in DECKS for n in d["cards"]}
-    print(f"backfilling images for {len(names)} cards")
-    ensure_images(names)
+    todo = [n for n in names if image_key(n) not in CARD_INFO and n not in MISSING]
+    print(f"backfill: {len(names)} cards, {len(CARD_INFO)} cached, "
+          f"{len(MISSING)} known misses, {len(todo)} to fetch")
+    ensure_images(todo)
     print("image backfill done")
 
 
