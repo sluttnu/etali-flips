@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json, os, pathlib, sys, math, shutil, time, requests
+from collections import defaultdict
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,6 +19,10 @@ HEADERS = {"Authorization": KEY, "Content-Type": "application/json"}
 # Same filename convention as before, so the app keeps working unchanged.
 OUT = pathlib.Path(f"data/standings_{DAYS}d_p{MIN_PLAYERS}_swiss{MIN_SWISS}.json")
 OUT.parent.mkdir(exist_ok=True)
+
+# Full names ("A // B") of double-faced cards that have appeared as a commander.
+# Used to fix decks that only registered the front half ("A").
+DFC_FILE = pathlib.Path("data/dfc_commanders.json")
 
 KEEP = ["TID", "tournamentName", "swissNum", "startDate", "topCut", "standings"]
 
@@ -90,6 +95,58 @@ def load_store():
         sys.exit(f"{OUT} exists but couldn't be parsed ({e}). Not touching it. Use --force to rebuild.")
 
 
+def load_dfc():
+    """The persisted set of full double-faced commander names."""
+    try:
+        return set(json.loads(DFC_FILE.read_text()))
+    except FileNotFoundError:
+        return set()
+    except (json.JSONDecodeError, TypeError) as e:
+        # Derived data: safe to rebuild from the stored decks.
+        print(f"{DFC_FILE} unreadable ({e}); rebuilding it from the stored decks")
+        return set()
+
+
+def save_dfc(dfc):
+    tmp = DFC_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(sorted(dfc), indent=2, ensure_ascii=False))
+    os.replace(tmp, DFC_FILE)
+
+
+def normalize_commanders(rows, dfc):
+    """Learn full "A // B" commander names, then rewrite decks that registered
+    only the front half ("A") to the full name. Mutates rows and dfc in place.
+    Returns how many decks were changed."""
+
+    def commanders_of(p):
+        return (p.get("deckObj") or {}).get("Commanders")
+
+    # 1) Learn every full name seen as a commander.
+    for t in rows:
+        for p in t.get("standings") or []:
+            for name in commanders_of(p) or {}:
+                if " // " in name:
+                    dfc.add(name)
+
+    # 2) Front half -> full name. A front half claimed by more than one full
+    #    name is ambiguous, so those decks are left alone.
+    claims = defaultdict(set)
+    for full in dfc:
+        claims[full.split(" // ")[0].strip()].add(full)
+    full_for = {front: next(iter(fulls)) for front, fulls in claims.items() if len(fulls) == 1}
+
+    # 3) Rewrite every stored deck, not just new ones, so older rows get fixed too.
+    changed = 0
+    for t in rows:
+        for p in t.get("standings") or []:
+            cmds = commanders_of(p)
+            if not cmds or not any(n in full_for for n in cmds):
+                continue
+            p["deckObj"]["Commanders"] = {full_for.get(n, n): info for n, info in cmds.items()}
+            changed += 1
+    return changed
+
+
 def main():
     now = int(time.time())
     cutoff = now - DAYS * 86400
@@ -152,7 +209,17 @@ def main():
     if not store:
         sys.exit("Store is empty after sync, not saving (check parameters / API).")
 
-    if added == 0 and pruned == 0 and not FORCE:
+    # Lump front-half-only commander names in with their full "A // B" name.
+    dfc = load_dfc()
+    dfc_before = set(dfc)
+    fixed = normalize_commanders(list(store.values()), dfc)
+    if fixed:
+        print(f"normalized {fixed} deck(s) to full double-faced commander names")
+    if dfc != dfc_before or not DFC_FILE.exists():
+        save_dfc(dfc)
+        print(f"{DFC_FILE}: {len(dfc)} double-faced commander name(s)")
+
+    if added == 0 and pruned == 0 and fixed == 0 and not FORCE:
         print("nothing changed, leaving file as is")
         return
 
@@ -163,7 +230,7 @@ def main():
     os.replace(tmp, OUT)
 
     sizes = [len(t["standings"]) for t in rows]
-    print(f"saved {OUT}: {len(rows)} tournaments (+{added} added, -{pruned} pruned)")
+    print(f"saved {OUT}: {len(rows)} tournaments (+{added} added, -{pruned} pruned, {fixed} commander names normalized)")
     print("qualifying players per tournament (min/max):", min(sizes), max(sizes))
 
 
