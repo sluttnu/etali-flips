@@ -142,6 +142,7 @@
       <input id="q" list="cmds" placeholder="Search commanders" autocomplete="off" />
       <datalist id="cmds"></datalist>
       <button type="submit">Show</button>
+      <button type="button" id="toggle-lands" aria-pressed="false">Hide lands</button>
       <button type="button" id="reset-filters" style="margin-left: 4px;">Reset filters</button>
     </form>
     <div class="daterow">
@@ -163,7 +164,8 @@
       data: null,
       selectedCards: [],
       excludedCards: [],
-      maxAgeDays: null,   // null = no date filter
+      maxAgeDays: null,
+      hideLands: false,
     };
 
     function pctLabel(x) {
@@ -233,6 +235,19 @@
       renderCurrentDeckView();
     });
 
+    function updateLandToggleButton() {
+      const btn = document.getElementById("toggle-lands");
+      if (!btn) return;
+      btn.textContent = state.hideLands ? "Show lands" : "Hide lands";
+      btn.setAttribute("aria-pressed", String(state.hideLands));
+    }
+
+    document.getElementById("toggle-lands").addEventListener("click", () => {
+      state.hideLands = !state.hideLands;
+      updateLandToggleButton();
+      renderCurrentDeckView();
+    });
+
     function buildFilteredCards() {
       const deckIndexes = [...getCurrentDeckSet()];
       const totalMatches = deckIndexes.length;
@@ -269,14 +284,13 @@
         }
       }
 
-      // Keep filtered cards visible even at 0 decks so they can be un-clicked.
+      const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
+
       const names = new Set([
         ...deckCounts.keys(),
         ...state.selectedCards,
         ...state.excludedCards,
-      ]);
-
-      const metaByName = new Map((state.data.cards || []).map(c => [c.name, c]));
+      ].filter(name => !state.hideLands || !metaByName.get(name)?.land));
 
       const cards = [...names].map(name => {
         const meta = metaByName.get(name) || {};
@@ -443,8 +457,10 @@
       state.selectedCards = [];
       state.excludedCards = [];
       state.maxAgeDays = null;
+      state.hideLands = false;
       ageInput.value = ageInput.max;
       updateAgeLabel();
+      updateLandToggleButton();
       renderCurrentDeckView();
     }
 
@@ -490,10 +506,12 @@
       state.selectedCards = [];
       state.excludedCards = [];
       state.maxAgeDays = null;
+      state.hideLands = false;
       ageInput.max = data.days || 365;
       ageInput.value = ageInput.max;
       ageInput.disabled = false;
       updateAgeLabel();
+      updateLandToggleButton();
 
       document.getElementById("title").textContent = "Average deck: " + data.commander;
       document.title = "Average deck: " + data.commander;
