@@ -13,6 +13,7 @@ services:
       - etali-flips-cache:/app/cache
       - ./templates/cardback.jpg:/app/cardback.jpg:ro
       - ./data:/app/data
+      - ./templates/average_deck.js:/app/average_deck.js
     networks:
       - proxy
   data-generation:
