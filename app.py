@@ -5,7 +5,7 @@ from flask import Flask, jsonify, render_template, request, session, send_from_d
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
+app.secret_key = os.environ.get("SECRET_KEY")
 
 DATA_DIR = pathlib.Path("data")
 ETALI = "Etali, Primal Conqueror"

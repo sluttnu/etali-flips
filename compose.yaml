@@ -3,12 +3,13 @@ services:
     image: ghcr.io/sluttnu/etali-flips:${TAG:-latest}
     container_name: etali-flips
     restart: unless-stopped
+    env_file:
+      - .env
     tmpfs:
       - /tmp
     env_file:
       - .env
-    environment:
-      PORT: "9000"
+      SECRET_KEY: ${SECRET_KEY}
     volumes:
       - etali-flips-cache:/app/cache
       - ./templates/cardback.jpg:/app/cardback.jpg:ro
