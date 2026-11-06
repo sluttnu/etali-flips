@@ -7,14 +7,13 @@ services:
       - .env
     tmpfs:
       - /tmp
-    env_file:
-      - .env
     volumes:
       - etali-flips-cache:/app/cache
       - ./templates/cardback.jpg:/app/cardback.jpg:ro
       - ./data:/app/data
     networks:
       - proxy
+
   data-generation:
     image: ghcr.io/sluttnu/etali-flips:${TAG:-latest}
     container_name: data-generation
