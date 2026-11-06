@@ -9,7 +9,6 @@ services:
       - /tmp
     env_file:
       - .env
-      SECRET_KEY: ${SECRET_KEY}
     volumes:
       - etali-flips-cache:/app/cache
       - ./templates/cardback.jpg:/app/cardback.jpg:ro
